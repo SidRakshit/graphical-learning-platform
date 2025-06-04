@@ -89,3 +89,15 @@ variable "ml_models_bucket_name" {
   type        = string
   default     = "" // We'll construct this in main.tf or you can set a full name here
 }
+
+variable "app_callback_urls" {
+  description = "A list of allowed callback URLs for your application after sign-in."
+  type        = list(string)
+  default     = ["http://localhost:3000/callback"] // Placeholder for local Next.js dev
+}
+
+variable "app_logout_urls" {
+  description = "A list of allowed logout URLs for your application."
+  type        = list(string)
+  default     = ["http://localhost:3000/login"] // Placeholder for local Next.js dev
+}

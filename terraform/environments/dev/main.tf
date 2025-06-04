@@ -464,3 +464,89 @@ resource "aws_security_group" "sagemaker_sg" {
     Name = "${var.project_name}-sg-sagemaker-${var.environment_name}"
   })
 }
+
+// --- AWS Cognito User Pool ---
+resource "aws_cognito_user_pool" "main_pool" {
+  name = "${var.project_name}-user-pool-${var.environment_name}"
+
+  # Password policy
+  password_policy {
+    minimum_length    = 8
+    require_lowercase = true
+    require_numbers   = true
+    require_symbols   = true
+    require_uppercase = true
+  }
+
+  # Allow users to sign themselves up
+  admin_create_user_config {
+    allow_admin_create_user_only = false // false means users can sign up themselves
+  }
+
+  # Standard attributes
+  schema {
+    name                = "email"
+    attribute_data_type = "String"
+    required            = true
+    mutable             = true // Usually true, so users can change their email if needed
+  }
+  schema {
+    name                = "name" // For user's full name
+    attribute_data_type = "String"
+    required            = false
+    mutable             = true
+  }
+
+  # How users can sign in (e.g., using email as username)
+  username_attributes = ["email"] // Users can sign in with their email address
+
+  # Attributes to be verified (e.g., email)
+  auto_verified_attributes = ["email"]
+
+  # MFA configuration (Off for simplicity to start)
+  mfa_configuration = "OFF"
+
+  tags = merge(local.common_tags, {
+    Name = "${var.project_name}-user-pool-${var.environment_name}"
+  })
+}
+
+// --- AWS Cognito User Pool Client ---
+// This is what your application will use to interact with the User Pool
+resource "aws_cognito_user_pool_client" "app_client" {
+  name         = "${var.project_name}-app-client-${var.environment_name}"
+  user_pool_id = aws_cognito_user_pool.main_pool.id
+
+  generate_secret = false // false for public clients like a web SPA (Single Page Application)
+
+  # Allowed authentication flows
+  explicit_auth_flows = [
+    "ALLOW_USER_SRP_AUTH",        // Secure Remote Password - preferred for client-side auth
+    "ALLOW_REFRESH_TOKEN_AUTH",   // To refresh tokens
+    "ALLOW_ADMIN_USER_PASSWORD_AUTH" // Can be useful for backend admin actions, or initial user creation by admin
+    // "ALLOW_USER_PASSWORD_AUTH" // Generally less secure than SRP for client-side apps
+  ]
+
+  # OAuth 2.0 configuration (if you plan to use Cognito's Hosted UI or OAuth flows)
+  allowed_oauth_flows_user_pool_client = true
+  allowed_oauth_flows                  = ["code", "implicit"] // 'code' for server-side, 'implicit' for client-side (though 'code' with PKCE is now preferred for SPAs)
+  allowed_oauth_scopes = [
+    "phone",
+    "email",
+    "openid",
+    "profile",
+    "aws.cognito.signin.user.admin" // Standard Cognito scope
+  ]
+
+  callback_urls = var.app_callback_urls // e.g., ["http://localhost:3000/callback"]
+  logout_urls   = var.app_logout_urls   // e.g., ["http://localhost:3000/login"]
+
+  supported_identity_providers = ["COGNITO"] // Only use Cognito's own user directory for now
+
+  prevent_user_existence_errors = "ENABLED" // Recommended to prevent attackers from guessing valid usernames
+
+  # Default token validity periods (can be customized)
+  # access_token_validity  = 60  # In minutes, default 60
+  # id_token_validity      = 60  # In minutes, default 60
+  # refresh_token_validity = 30  # In days, default 30
+}

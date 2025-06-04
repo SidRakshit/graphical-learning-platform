@@ -75,3 +75,18 @@ output "sagemaker_security_group_id" {
   description = "The ID of the Security Group for SageMaker resources."
   value       = aws_security_group.sagemaker_sg.id
 }
+
+output "cognito_user_pool_id" {
+  description = "The ID of the Cognito User Pool."
+  value       = aws_cognito_user_pool.main_pool.id
+}
+
+output "cognito_user_pool_client_id" {
+  description = "The ID of the Cognito User Pool Client."
+  value       = aws_cognito_user_pool_client.app_client.id
+}
+
+output "cognito_user_pool_endpoint" {
+  description = "The endpoint for the Cognito User Pool (useful for federation, metadata)."
+  value       = aws_cognito_user_pool.main_pool.endpoint // e.g., cognito-idp.us-east-1.amazonaws.com/us-east-1_xxxxxxxxx
+}
