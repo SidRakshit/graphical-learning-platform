@@ -40,3 +40,13 @@ output "web_security_group_id" {
   description = "The ID of the Security Group that allows Web (HTTP/HTTPS) access."
   value       = aws_security_group.allow_web.id
 }
+
+output "auradb_credentials_secret_arn" {
+  description = "The ARN of the AWS Secrets Manager secret for AuraDB credentials."
+  value       = aws_secretsmanager_secret.auradb_credentials.arn
+}
+
+output "app_security_group_id" {
+  description = "The ID of the Security Group for the application backend."
+  value       = aws_security_group.app_sg.id
+}

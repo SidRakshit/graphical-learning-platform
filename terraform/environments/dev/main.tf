@@ -245,3 +245,62 @@ resource "aws_security_group" "allow_web" {
     Name = "${var.project_name}-sg-allow-web-${var.environment_name}"
   })
 }
+
+// --- AWS Secrets Manager for AuraDB Credentials ---
+resource "aws_secretsmanager_secret" "auradb_credentials" {
+  name        = "${var.project_name}-auradb-credentials-${var.environment_name}"
+  description = "Credentials for Neo4j AuraDB instance"
+
+  tags = merge(local.common_tags, {
+    Name = "${var.project_name}-auradb-secret-${var.environment_name}"
+  })
+}
+
+resource "aws_secretsmanager_secret_version" "auradb_credentials_version" {
+  secret_id     = aws_secretsmanager_secret.auradb_credentials.id
+  secret_string = jsonencode({ // Stores the credentials as a JSON string
+    uri      = var.auradb_connection_uri
+    username = var.auradb_username
+    password = var.auradb_password
+  })
+}
+
+// --- Security Group for Application Backend ---
+// This SG will be used by your FastAPI application (e.g., if running on EC2/App Runner/Lambda in VPC)
+resource "aws_security_group" "app_sg" {
+  name        = "${var.project_name}-app-sg-${var.environment_name}"
+  description = "Security group for the application backend"
+  vpc_id      = aws_vpc.main.id
+
+  // Ingress rules will depend on what needs to talk to the app
+  // For example, if an Application Load Balancer or API Gateway fronts it:
+  // ingress {
+  //   description = "Allow traffic from ALB/API Gateway on app port (e.g., 8000)"
+  //   from_port   = 8000 // Your FastAPI app's port
+  //   to_port     = 8000
+  //   protocol    = "tcp"
+  //   security_groups = [aws_security_group.allow_web.id] // Example: if allow_web is for an ALB
+  // }
+  // For now, we'll keep ingress minimal or placeholder until app deployment.
+
+  // Egress rule to allow outbound connection to Neo4j AuraDB
+  egress {
+    description      = "Allow outbound to Neo4j AuraDB (Bolt port)"
+    from_port        = 7687 // Neo4j Bolt port
+    to_port          = 7687
+    protocol         = "tcp"
+    cidr_blocks      = ["0.0.0.0/0"] // AuraDB is on the public internet
+  }
+
+  egress { // Default allow all other outbound traffic (can be refined)
+    from_port        = 0
+    to_port          = 0
+    protocol         = "-1"
+    cidr_blocks      = ["0.0.0.0/0"]
+    ipv6_cidr_blocks = ["::/0"]
+  }
+
+  tags = merge(local.common_tags, {
+    Name = "${var.project_name}-sg-app-${var.environment_name}"
+  })
+}

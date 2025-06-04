@@ -60,3 +60,20 @@ variable "my_ip_address" {
   type        = string
   }
   
+  variable "auradb_connection_uri" {
+  description = "The Connection URI for the Neo4j AuraDB instance."
+  type        = string
+  sensitive   = true // Marks this variable as sensitive
+}
+
+variable "auradb_username" {
+  description = "The username for the Neo4j AuraDB instance."
+  type        = string
+  sensitive   = true
+}
+
+variable "auradb_password" {
+  description = "The password for the Neo4j AuraDB instance."
+  type        = string
+  sensitive   = true
+}
