@@ -54,3 +54,9 @@ variable "availability_zones" {
   // Ensure these AZs are valid for your chosen 'aws_region' (us-east-1)
   default     = ["us-east-1a", "us-east-1b"]
 }
+
+variable "my_ip_address" {
+  description = "Your current public IP address to allow for SSH access. Find it by searching 'What is my IP' in Google."
+  type        = string
+  }
+  

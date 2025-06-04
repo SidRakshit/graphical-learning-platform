@@ -2,6 +2,7 @@
 *.tfstate.*
 .terraform/
 .env
+*terraform.tfvars
 *.secret.tfvars
 *.secret
 *.pem

@@ -30,3 +30,13 @@ output "availability_zones_used" {
   description = "The Availability Zones used for the subnets."
   value       = var.availability_zones // Outputs the value of the input variable
 }
+
+output "ssh_security_group_id" {
+  description = "The ID of the Security Group that allows SSH access."
+  value       = aws_security_group.allow_ssh.id
+}
+
+output "web_security_group_id" {
+  description = "The ID of the Security Group that allows Web (HTTP/HTTPS) access."
+  value       = aws_security_group.allow_web.id
+}
