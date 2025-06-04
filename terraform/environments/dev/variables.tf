@@ -77,3 +77,15 @@ variable "auradb_password" {
   type        = string
   sensitive   = true
 }
+
+variable "ml_datasets_bucket_name" {
+  description = "The name for the S3 bucket to store ML datasets."
+  type        = string
+  default     = "" // We'll construct this in main.tf or you can set a full name here
+}
+
+variable "ml_models_bucket_name" {
+  description = "The name for the S3 bucket to store ML models and artifacts."
+  type        = string
+  default     = "" // We'll construct this in main.tf or you can set a full name here
+}

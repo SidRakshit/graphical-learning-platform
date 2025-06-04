@@ -16,12 +16,17 @@ provider "aws" {
 
 // Locals block for defining common values, like tags
 locals {
+  s3_bucket_prefix = "${var.project_name}-${var.environment_name}"
   common_tags = {
     Project     = var.project_name
     Environment = var.environment_name // Assuming you named it environment_name in variables.tf
-    ManagedBy   = "Terraform"
+    ManagedBy   = "Terraform"  
   }
+  actual_ml_datasets_bucket_name = "${local.s3_bucket_prefix}-ml-datasets-${data.aws_caller_identity.current.account_id}"
+  actual_ml_models_bucket_name   = "${local.s3_bucket_prefix}-ml-models-${data.aws_caller_identity.current.account_id}"
 }
+
+data "aws_caller_identity" "current" {}
 
 // --- Virtual Private Cloud (VPC) ---
 resource "aws_vpc" "main" {
@@ -302,5 +307,160 @@ resource "aws_security_group" "app_sg" {
 
   tags = merge(local.common_tags, {
     Name = "${var.project_name}-sg-app-${var.environment_name}"
+  })
+}
+
+// --- IAM Role for Lambda Execution (for FastAPI Backend) ---
+resource "aws_iam_role" "lambda_execution_role" {
+  name = "${var.project_name}-lambda-execution-role-${var.environment_name}"
+
+  // Policy that allows Lambda to assume this role
+  assume_role_policy = jsonencode({
+    Version   = "2012-10-17",
+    Statement = [
+      {
+        Action    = "sts:AssumeRole",
+        Effect    = "Allow",
+        Principal = {
+          Service = "lambda.amazonaws.com"
+        }
+      }
+    ]
+  })
+
+  tags = merge(local.common_tags, {
+    Name = "${var.project_name}-lambda-exec-role-${var.environment_name}"
+  })
+}
+
+// Attach AWS Managed Policy for basic Lambda logging to CloudWatch
+resource "aws_iam_role_policy_attachment" "lambda_basic_execution" {
+  role       = aws_iam_role.lambda_execution_role.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+// Attach AWS Managed Policy for Lambda VPC access (if you deploy Lambda in your VPC)
+// This allows Lambda to create and manage Elastic Network Interfaces (ENIs) in your VPC.
+resource "aws_iam_role_policy_attachment" "lambda_vpc_access_execution" {
+  role       = aws_iam_role.lambda_execution_role.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
+}
+
+// --- S3 Buckets for ML ---
+resource "aws_s3_bucket" "ml_datasets_bucket" {
+  bucket = local.actual_ml_datasets_bucket_name // Constructed unique name
+
+  tags = merge(local.common_tags, {
+    Name = local.actual_ml_datasets_bucket_name
+  })
+}
+
+resource "aws_s3_bucket_versioning" "ml_datasets_bucket_versioning" {
+  bucket = aws_s3_bucket.ml_datasets_bucket.id
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "ml_datasets_bucket_sse" {
+  bucket = aws_s3_bucket.ml_datasets_bucket.id
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+  }
+}
+
+resource "aws_s3_bucket_public_access_block" "ml_datasets_bucket_pab" {
+  bucket                  = aws_s3_bucket.ml_datasets_bucket.id
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+resource "aws_s3_bucket" "ml_models_bucket" {
+  bucket = local.actual_ml_models_bucket_name // Constructed unique name
+
+  tags = merge(local.common_tags, {
+    Name = local.actual_ml_models_bucket_name
+  })
+}
+
+resource "aws_s3_bucket_versioning" "ml_models_bucket_versioning" {
+  bucket = aws_s3_bucket.ml_models_bucket.id
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "ml_models_bucket_sse" {
+  bucket = aws_s3_bucket.ml_models_bucket.id
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+  }
+}
+
+resource "aws_s3_bucket_public_access_block" "ml_models_bucket_pab" {
+  bucket                  = aws_s3_bucket.ml_models_bucket.id
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+
+// --- VPC S3 Gateway Endpoint ---
+// Allows resources in your VPC to access S3 without going over the internet
+resource "aws_vpc_endpoint" "s3_gateway_endpoint" {
+  vpc_id       = aws_vpc.main.id
+  service_name = "com.amazonaws.${var.aws_region}.s3" // S3 service endpoint for your region
+  vpc_endpoint_type = "Gateway"
+
+  // Associate with your private and public route tables.
+  // This modifies the route tables to add a route to S3 via the AWS private network.
+  route_table_ids = [
+    aws_route_table.public_rt.id,
+    aws_route_table.private_az1_rt.id,
+    aws_route_table.private_az2_rt.id
+  ]
+
+  tags = merge(local.common_tags, {
+    Name = "${var.project_name}-s3-gateway-endpoint-${var.environment_name}"
+  })
+}
+
+// --- Security Group for SageMaker resources (if VPC enabled) ---
+resource "aws_security_group" "sagemaker_sg" {
+  name        = "${var.project_name}-sagemaker-sg-${var.environment_name}"
+  description = "Security group for SageMaker endpoints, training jobs, or notebooks within the VPC"
+  vpc_id      = aws_vpc.main.id
+
+  // Example Ingress: Allow FastAPI backend (app_sg) to call a SageMaker endpoint
+  // This assumes the SageMaker endpoint listens on a specific port (e.g., 8080 or 443 for HTTPS)
+  // ingress {
+  //   description     = "Allow App SG to call SageMaker endpoint"
+  //   from_port       = 443 // Or SageMaker's specific inference port
+  //   to_port         = 443
+  //   protocol        = "tcp"
+  //   security_groups = [aws_security_group.app_sg.id]
+  // }
+
+  // Egress: Allow SageMaker to access S3 (via VPC endpoint), ECR, and internet for packages
+  // The S3 Gateway endpoint handles S3 traffic without needing a specific egress rule here for S3 IPs.
+  // However, for other services like ECR or general internet (e.g. for pip install in training),
+  // it might need broader egress.
+  egress {
+    from_port        = 0
+    to_port          = 0
+    protocol         = "-1"
+    cidr_blocks      = ["0.0.0.0/0"]
+    ipv6_cidr_blocks = ["::/0"]
+  }
+
+  tags = merge(local.common_tags, {
+    Name = "${var.project_name}-sg-sagemaker-${var.environment_name}"
   })
 }

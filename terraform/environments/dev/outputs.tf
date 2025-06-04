@@ -50,3 +50,28 @@ output "app_security_group_id" {
   description = "The ID of the Security Group for the application backend."
   value       = aws_security_group.app_sg.id
 }
+
+output "lambda_execution_role_arn" {
+  description = "The ARN of the IAM role for Lambda execution."
+  value       = aws_iam_role.lambda_execution_role.arn
+}
+
+output "ml_datasets_bucket_name" {
+  description = "The name of the S3 bucket for ML datasets."
+  value       = aws_s3_bucket.ml_datasets_bucket.bucket
+}
+
+output "ml_models_bucket_name" {
+  description = "The name of the S3 bucket for ML models and artifacts."
+  value       = aws_s3_bucket.ml_models_bucket.bucket
+}
+
+output "s3_gateway_endpoint_id" {
+  description = "The ID of the VPC S3 Gateway Endpoint."
+  value       = aws_vpc_endpoint.s3_gateway_endpoint.id
+}
+
+output "sagemaker_security_group_id" {
+  description = "The ID of the Security Group for SageMaker resources."
+  value       = aws_security_group.sagemaker_sg.id
+}
