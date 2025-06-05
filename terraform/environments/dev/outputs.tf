@@ -90,3 +90,8 @@ output "cognito_user_pool_endpoint" {
   description = "The endpoint for the Cognito User Pool (useful for federation, metadata)."
   value       = aws_cognito_user_pool.main_pool.endpoint // e.g., cognito-idp.us-east-1.amazonaws.com/us-east-1_xxxxxxxxx
 }
+
+output "ecr_repository_url" {
+  description = "The URL of the ECR repository for the backend API."
+  value       = aws_ecr_repository.backend_api_repo.repository_url
+}
