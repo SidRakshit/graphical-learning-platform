@@ -24,6 +24,7 @@ locals {
   }
   actual_ml_datasets_bucket_name = "${local.s3_bucket_prefix}-ml-datasets-${data.aws_caller_identity.current.account_id}"
   actual_ml_models_bucket_name   = "${local.s3_bucket_prefix}-ml-models-${data.aws_caller_identity.current.account_id}"
+  actual_ecr_repository_name = "${var.project_name}-${var.environment_name}-backend-api"
 }
 
 data "aws_caller_identity" "current" {}
@@ -489,12 +490,14 @@ resource "aws_cognito_user_pool" "main_pool" {
     attribute_data_type = "String"
     required            = true
     mutable             = true // Usually true, so users can change their email if needed
+    string_attribute_constraints {}
   }
   schema {
     name                = "name" // For user's full name
     attribute_data_type = "String"
     required            = false
     mutable             = true
+    string_attribute_constraints {}
   }
 
   # How users can sign in (e.g., using email as username)
@@ -549,4 +552,18 @@ resource "aws_cognito_user_pool_client" "app_client" {
   # access_token_validity  = 60  # In minutes, default 60
   # id_token_validity      = 60  # In minutes, default 60
   # refresh_token_validity = 30  # In days, default 30
+}
+
+// --- ECR Repository for Backend Docker Image ---
+resource "aws_ecr_repository" "backend_api_repo" {
+  name                 = local.actual_ecr_repository_name
+  image_tag_mutability = "MUTABLE" // Or "IMMUTABLE" if you prefer new tags for every push
+
+  image_scanning_configuration {
+    scan_on_push = true // Automatically scan images for vulnerabilities
+  }
+
+  tags = merge(local.common_tags, {
+    Name = local.actual_ecr_repository_name
+  })
 }

@@ -101,3 +101,9 @@ variable "app_logout_urls" {
   type        = list(string)
   default     = ["http://localhost:3000/login"] // Placeholder for local Next.js dev
 }
+
+variable "ecr_repository_name" {
+  description = "Name for the ECR repository to store the backend Docker image."
+  type        = string
+  default     = "" // We'll construct this in main.tf using project/environment names
+}
