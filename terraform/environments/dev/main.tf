@@ -347,6 +347,33 @@ resource "aws_iam_role_policy_attachment" "lambda_vpc_access_execution" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
 }
 
+// Define an IAM policy that allows reading the specific AuraDB secret
+resource "aws_iam_policy" "lambda_secrets_manager_auradb_policy" {
+  name        = "${var.project_name}-lambda-secrets-auradb-policy-${var.environment_name}"
+  description = "Allows Lambda to read the AuraDB credentials from Secrets Manager"
+
+  policy = jsonencode({
+    Version   = "2012-10-17",
+    Statement = [
+      {
+        Action   = "secretsmanager:GetSecretValue",
+        Effect   = "Allow",
+        Resource = aws_secretsmanager_secret.auradb_credentials.arn // ARN of the secret we created
+      }
+    ]
+  })
+
+  tags = merge(local.common_tags, {
+    Name = "${var.project_name}-lambda-secrets-auradb-policy-${var.environment_name}"
+  })
+}
+
+// Attach the new policy to the Lambda execution role
+resource "aws_iam_role_policy_attachment" "lambda_secrets_manager_auradb_attachment" {
+  role       = aws_iam_role.lambda_execution_role.name
+  policy_arn = aws_iam_policy.lambda_secrets_manager_auradb_policy.arn
+}
+
 // --- S3 Buckets for ML ---
 resource "aws_s3_bucket" "ml_datasets_bucket" {
   bucket = local.actual_ml_datasets_bucket_name // Constructed unique name
@@ -512,6 +539,15 @@ resource "aws_cognito_user_pool" "main_pool" {
   tags = merge(local.common_tags, {
     Name = "${var.project_name}-user-pool-${var.environment_name}"
   })
+
+  lifecycle {
+    ignore_changes = [
+      schema,
+      # You might occasionally see diffs for estimated_number_of_users too,
+      # if so, you could add it here:
+      # estimated_number_of_users,
+    ]
+  }
 }
 
 // --- AWS Cognito User Pool Client ---
@@ -566,4 +602,103 @@ resource "aws_ecr_repository" "backend_api_repo" {
   tags = merge(local.common_tags, {
     Name = local.actual_ecr_repository_name
   })
+}
+
+// --- AWS Lambda Function for FastAPI Backend (from ECR Image) ---
+resource "aws_lambda_function" "fastapi_lambda" {
+  function_name = "${var.project_name}-backend-api-${var.environment_name}"
+  role          = aws_iam_role.lambda_execution_role.arn // Use the IAM role we created/updated
+  package_type  = "Image"
+  image_uri     = "${aws_ecr_repository.backend_api_repo.repository_url}:latest" // Assumes you tagged your image as 'latest'
+
+  timeout     = 30  // Maximum execution time for the function in seconds (API Gateway has a 29s limit)
+  memory_size = 512 // MB of memory allocated (adjust based on need)
+
+  # Choose the architecture your Docker image was built for.
+  # Common options: "x86_64" or "arm64".
+  # If you built on an M-series Mac, it's likely "arm64".
+  # The AWS base image public.ecr.aws/lambda/python:3.11 supports both.
+  architectures = ["arm64"] # Or "x86_64"
+
+  # VPC Configuration (to allow access to internal resources and use NAT Gateway for internet)
+  # This also allows the Lambda to use the app_sg for egress to AuraDB.
+  vpc_config {
+    subnet_ids         = [aws_subnet.private_az1.id, aws_subnet.private_az2.id]
+    security_group_ids = [aws_security_group.app_sg.id]
+  }
+
+  # Environment variables for the Lambda function (if needed)
+  # Example: to pass the secret ARN and region to your db.py if not hardcoded/read differently
+  environment {
+    variables = {
+      AURADB_SECRET_ARN = aws_secretsmanager_secret.auradb_credentials.arn
+      # Add other environment variables your FastAPI app might need
+    }
+  }
+
+  tags = merge(local.common_tags, {
+    Name = "${var.project_name}-backend-api-lambda-${var.environment_name}"
+  })
+
+  # Depends on the ECR repository being available
+  depends_on = [aws_ecr_repository.backend_api_repo, aws_iam_role_policy_attachment.lambda_secrets_manager_auradb_attachment]
+}
+
+// --- API Gateway (HTTP API) ---
+resource "aws_apigatewayv2_api" "http_api" {
+  name          = "${var.project_name}-backend-http-api-${var.environment_name}"
+  protocol_type = "HTTP"
+  description   = "HTTP API for the ${var.project_name} backend"
+
+  # CORS configuration (basic example, customize as needed for your frontend's domain)
+  cors_configuration {
+    allow_origins = ["*"] # For development, be more specific for production
+    allow_methods = ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"]
+    allow_headers = ["Content-Type", "Authorization", "X-Amz-Date", "X-Api-Key", "X-Amz-Security-Token"]
+    expose_headers = ["Content-Length", "Content-Type"]
+    max_age = 300
+  }
+
+  tags = merge(local.common_tags, {
+    Name = "${var.project_name}-http-api-${var.environment_name}"
+  })
+}
+
+// Lambda Integration for API Gateway
+resource "aws_apigatewayv2_integration" "lambda_integration" {
+  api_id           = aws_apigatewayv2_api.http_api.id
+  integration_type = "AWS_PROXY" // For Lambda proxy integration
+  integration_uri  = aws_lambda_function.fastapi_lambda.invoke_arn // ARN for Lambda to invoke
+  payload_format_version = "2.0" // Recommended for HTTP APIs
+}
+
+// Default Route for API Gateway - sends all requests to the Lambda integration
+resource "aws_apigatewayv2_route" "default_route" {
+  api_id    = aws_apigatewayv2_api.http_api.id
+  route_key = "$default" // Catch-all route for HTTP APIs
+  target    = "integrations/${aws_apigatewayv2_integration.lambda_integration.id}"
+}
+
+// Default Stage for API Gateway (auto-deploys changes)
+resource "aws_apigatewayv2_stage" "default_stage" {
+  api_id      = aws_apigatewayv2_api.http_api.id
+  name        = "$default" // Creates a stage that's immediately invokable at the API base URL
+  auto_deploy = true
+
+  tags = merge(local.common_tags, {
+    Name = "${var.project_name}-http-api-default-stage-${var.environment_name}"
+  })
+}
+
+// Permission for API Gateway to invoke the Lambda function
+resource "aws_lambda_permission" "api_gw_lambda_invoke" {
+  statement_id  = "AllowExecutionFromAPIGateway"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.fastapi_lambda.function_name
+  principal     = "apigateway.amazonaws.com"
+
+  // Source ARN restricting to this specific API Gateway
+  source_arn = "${aws_apigatewayv2_api.http_api.execution_arn}/*/*" 
+  // The first * is for any stage, the second * is for any HTTP method on any path.
+  // You can make this more specific if needed: e.g. "${aws_apigatewayv2_api.http_api.execution_arn}/${aws_apigatewayv2_stage.default_stage.name}/*/*"
 }

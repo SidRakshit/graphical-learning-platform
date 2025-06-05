@@ -95,3 +95,18 @@ output "ecr_repository_url" {
   description = "The URL of the ECR repository for the backend API."
   value       = aws_ecr_repository.backend_api_repo.repository_url
 }
+
+output "lambda_function_name" {
+  description = "The name of the FastAPI Lambda function."
+  value       = aws_lambda_function.fastapi_lambda.function_name
+}
+
+output "lambda_function_arn" {
+  description = "The ARN of the FastAPI Lambda function."
+  value       = aws_lambda_function.fastapi_lambda.arn
+}
+
+output "api_gateway_endpoint_url" {
+  description = "The invocation URL for the HTTP API Gateway default stage."
+  value       = aws_apigatewayv2_stage.default_stage.invoke_url
+}

@@ -3,8 +3,8 @@ from fastapi import FastAPI, HTTPException, Depends, status
 from contextlib import asynccontextmanager
 
 # Import from your db.py file
-from .db import get_db_connection, close_db_connection, Neo4jConnection
-from . import models  # Import your Pydantic models
+from db import get_db_connection, close_db_connection, Neo4jConnection
+import models
 import uuid  # For generating IDs
 from typing import List
 from mangum import Mangum
