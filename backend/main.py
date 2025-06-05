@@ -1,65 +1,98 @@
 # backend/main.py
-from fastapi import FastAPI, HTTPException, Depends, status
+from fastapi import FastAPI, HTTPException, Depends, status, Header
 from contextlib import asynccontextmanager
+from typing import List, Optional
 
-# Import from your db.py file
+# Import from your local modules
 from db import get_db_connection, close_db_connection, Neo4jConnection
-import models
-import uuid  # For generating IDs
-from typing import List
-from mangum import Mangum
+import models  # Your Pydantic models from models.py
+from graph_service import GraphDBService  # Import the new service
+
+import uuid  # Not directly used here anymore for node ID generation if service handles it
+from datetime import (
+    datetime,
+)  # Not directly used here for timestamps if service handles it
 
 
-# Lifespan manager for application startup and shutdown events
+# --- Lifespan Manager (No changes needed from last correct version) ---
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: Initialize DB connection
     print("Application startup: Attempting to initialize database connection...")
     try:
-        get_db_connection()  # This will initialize the global driver in db.py
-        print("Database connection initialized (or was already initialized).")
+        conn_instance = get_db_connection()
+        if conn_instance is None or not conn_instance._driver:  # Check internal _driver
+            print(
+                "FATAL: Database driver (conn_instance._driver) not initialized during startup."
+            )
+            # Consider raising an error to halt app startup if DB is critical
+            # raise RuntimeError("Failed to initialize database driver during startup.")
+        else:
+            print(
+                "Database connection (_driver attribute) appears to be initialized via lifespan."
+            )
     except Exception as e:
-        print(f"Application startup: Failed to initialize database: {e}")
-        # Depending on your app's needs, you might want to prevent startup
-        # or allow it to start in a degraded state.
-
-    yield  # Application runs here
-
-    # Shutdown: Close DB connection
+        print(f"Application startup: Failed to initialize database due to: {e}")
+    yield
     print("Application shutdown: Closing database connection...")
     close_db_connection()
     print("Database connection closed.")
 
 
-app = FastAPI(lifespan=lifespan)  # Use the lifespan manager
+app = FastAPI(lifespan=lifespan)
 
 
-# Dependency to get the DB connection
-# This makes it easier to use the connection in your path operations
-async def get_db() -> Neo4jConnection:
-    db_conn = get_db_connection()
-    if db_conn is None:
-        # This might happen if initialization failed during startup
-        raise HTTPException(status_code=503, detail="Database connection not available")
-    return db_conn
+# --- Database Dependency (No changes needed from last correct version) ---
+async def get_db_conn() -> (
+    Neo4jConnection
+):  # Renamed to avoid conflict if get_db is used for service
+    db_conn_instance = get_db_connection()
+    if (
+        db_conn_instance is None or not db_conn_instance._driver
+    ):  # Check internal _driver
+        print(
+            "Error in get_db_conn: Neo4jConnection instance is None or its _driver is not initialized."
+        )
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database connection not available or not initialized.",
+        )
+    return db_conn_instance
 
 
+# --- Placeholder Auth Dependency (No changes needed) ---
+async def get_current_user_id_from_header(
+    x_user_id: Optional[str] = Header(None),
+) -> str:
+    if not x_user_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated (X-User-ID header missing or invalid for test setup)",
+        )
+    return x_user_id
+
+
+# --- NEW: Graph Service Dependency ---
+def get_graph_service(
+    db_conn: Neo4jConnection = Depends(get_db_conn),
+) -> GraphDBService:
+    """Dependency to provide an instance of GraphDBService."""
+    return GraphDBService(db_connection=db_conn)
+
+
+# --- Root and DB Test Endpoints (No changes needed, but ensure db_test uses get_db_conn) ---
 @app.get("/")
 async def root():
     return {"message": "Hello World - Backend API is running!"}
 
 
-@app.get("/items/{item_id}")
-async def read_item(item_id: int, q: str | None = None):
-    return {"item_id": item_id, "q": q}
-
-
-# New endpoint to test DB connection
 @app.get("/db_test")
-async def test_db_connection(db: Neo4jConnection = Depends(get_db)):
+async def test_db_connection(
+    db_conn_instance: Neo4jConnection = Depends(get_db_conn),
+):  # Use get_db_conn
     try:
-        # A very simple query to test the connection
-        results = db.query("RETURN 1 AS result")
+        results = db_conn_instance.query(
+            "RETURN 1 AS result"
+        )  # Call query on the Neo4jConnection instance
         if results and results[0]["result"] == 1:
             return {
                 "status": "success",
@@ -72,246 +105,159 @@ async def test_db_connection(db: Neo4jConnection = Depends(get_db)):
                 "results": results,
             }
     except Exception as e:
-        # If any exception occurs during the DB query
         raise HTTPException(status_code=500, detail=f"Database query failed: {str(e)}")
 
 
+# --- REFACTORED: create_root_interaction_node ---
 @app.post(
-    "/topics/",
-    response_model=models.Topic,
+    "/interaction-nodes/start",
+    response_model=models.InteractionNode,
     status_code=status.HTTP_201_CREATED,
-    tags=["Topics"],
+    tags=["Interaction Nodes"],
 )
-async def create_topic(
-    topic_data: models.TopicCreate, db: Neo4jConnection = Depends(get_db)
+async def create_root_interaction_node_endpoint(  # Renamed to avoid confusion with service method
+    payload: models.RootInteractionNodeCreate,
+    current_user_id: str = Depends(get_current_user_id_from_header),
+    graph_svc: GraphDBService = Depends(get_graph_service),  # Inject graph service
 ):
-    """
-    Create a new topic in the database.
-    """
-    # Generate a unique ID for the new topic
-    topic_id = str(uuid.uuid4())
-
-    # Prepare the Cypher query and parameters
-    # We're creating a node with the Label "Topic"
-    # Properties are passed as parameters to prevent Cypher injection
-    query = (
-        "CREATE (t:Topic {id: $id, name: $name, description: $description}) "
-        "RETURN t.id AS id, t.name AS name, t.description AS description"
-    )
-    parameters = {
-        "id": topic_id,
-        "name": topic_data.name,
-        "description": topic_data.description,
-    }
+    # Placeholder for LLM Interaction - this part remains in the API layer for now
+    # In a more complex app, this might also be a separate service.
+    llm_response_text = f"This is a placeholder LLM response to your prompt: '{payload.user_prompt}' for user {current_user_id}"
 
     try:
-        results = db.query(query, parameters)
-        if results:
-            # The query returns the properties of the created node
-            created_topic_data = results[0]  # Get the first (and only) record
-            # Pydantic's from_attributes (thanks to model_config) should handle the dict-like record
-            return models.Topic(**created_topic_data)
-        else:
-            raise HTTPException(
-                status_code=500,
-                detail="Failed to create topic in database or no result returned.",
-            )
+        # Call the graph service to create the node
+        created_node = await graph_svc.create_root_interaction_node(
+            user_id=current_user_id,
+            user_prompt=payload.user_prompt,
+            summary_title=payload.summary_title,
+            llm_response=llm_response_text,  # Pass the LLM response
+        )
+        return created_node
     except Exception as e:
-        # Log the exception e here in a real application
-        print(f"Error creating topic: {e}")
+        # Catch exceptions from the service layer (e.g., database errors)
+        print(f"API Error: Failed to create root interaction node: {e}")
+        # You might want to inspect 'e' to return more specific HTTP errors
         raise HTTPException(
-            status_code=500,
-            detail=f"An error occurred while creating the topic: {str(e)}",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"An error occurred while creating the root interaction node: {str(e)}",
         )
 
 
-@app.get("/topics/{topic_id}", response_model=models.Topic, tags=["Topics"])
-async def get_topic(topic_id: str, db: Neo4jConnection = Depends(get_db)):
-    """
-    Retrieve a specific topic by its ID.
-    """
-    query = (
-        "MATCH (t:Topic {id: $topic_id}) "
-        "RETURN t.id AS id, t.name AS name, t.description AS description"
-    )
-    parameters = {"topic_id": topic_id}
-
-    try:
-        results = db.query(query, parameters)
-        if results:
-            # Pydantic's from_attributes should handle the dict-like record
-            return models.Topic(**results[0])
-        else:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="Topic not found"
-            )
-    except HTTPException:
-        raise  # Re-raise HTTPException directly
-    except Exception as e:
-        # Log the exception e here in a real application
-        print(f"Error retrieving topic: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"An error occurred while retrieving the topic: {str(e)}",
-        )
-
-
-@app.get("/topics/", response_model=List[models.Topic], tags=["Topics"])
-async def get_all_topics(db: Neo4jConnection = Depends(get_db)):
-    """
-    Retrieve all topics from the database, ordered by name.
-    """
-    query = (
-        "MATCH (t:Topic) "
-        "RETURN t.id AS id, t.name AS name, t.description AS description "
-        "ORDER BY t.name"  # Ordering results by name for consistency
-    )
-
-    try:
-        results = db.query(query)
-        topics = []
-        if results:
-            for record in results:
-                # Pydantic's from_attributes should handle the dict-like record
-                topics.append(models.Topic(**record))
-        return topics
-    except Exception as e:
-        # Log the exception e here in a real application
-        print(f"Error retrieving all topics: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"An error occurred while retrieving topics: {str(e)}",
-        )
-
-
-@app.put("/topics/{topic_id}", response_model=models.Topic, tags=["Topics"])
-async def update_topic(
-    topic_id: str,
-    topic_update_data: models.TopicUpdate,
-    db: Neo4jConnection = Depends(get_db),
+# --- REFACTORED: create_branched_interaction_node ---
+@app.post(
+    "/interaction-nodes/{parent_node_id}/branch",
+    response_model=models.InteractionNode,
+    status_code=status.HTTP_201_CREATED,
+    tags=["Interaction Nodes"],
+)
+async def create_branched_interaction_node_endpoint(  # Renamed
+    parent_node_id: str,
+    payload: models.InteractionNodeCreate,
+    current_user_id: str = Depends(get_current_user_id_from_header),
+    graph_svc: GraphDBService = Depends(get_graph_service),
 ):
-    """
-    Update an existing topic by its ID.
-    Only fields provided in the request body will be updated.
-    """
-    # Convert the Pydantic model to a dictionary, excluding unset fields
-    # This ensures we only try to update fields that were actually provided in the request
-    update_fields = topic_update_data.model_dump(exclude_unset=True)
-
-    if not update_fields:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="No update fields provided."
-        )
-
-    # Build the SET part of the Cypher query dynamically
-    # This is safer and cleaner than string formatting directly into the query.
-    # Example: SET t.name = $name, t.description = $description
-    set_clauses = [f"t.{key} = ${key}" for key in update_fields.keys()]
-    set_query_part = ", ".join(set_clauses)
-
-    query = (
-        f"MATCH (t:Topic {{id: $topic_id}}) "
-        f"SET {set_query_part} "
-        "RETURN t.id AS id, t.name AS name, t.description AS description"
-    )
-
-    parameters = {"topic_id": topic_id, **update_fields}
+    # Placeholder LLM call
+    llm_response_text = f"Placeholder LLM response for branch from {parent_node_id} to '{payload.user_prompt}' by {current_user_id}"
 
     try:
-        results = db.query(query, parameters)
-        if results:
-            # Pydantic's from_attributes should handle the dict-like record
-            return models.Topic(**results[0])
-        else:
-            # This means the MATCH clause didn't find the topic
+        branched_node = await graph_svc.create_branched_interaction_node(
+            parent_node_id=parent_node_id,
+            user_id=current_user_id,
+            user_prompt=payload.user_prompt,
+            summary_title=payload.summary_title,
+            llm_response=llm_response_text,
+        )
+        return branched_node
+    except (
+        ValueError
+    ) as ve:  # Catch the specific ValueError for parent not found/accessible
+        print(f"API Error: Parent node issue for branching: {ve}")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,  # Or 403 if it's an auth issue on parent
+            detail=str(ve),
+        )
+    except Exception as e:
+        print(f"API Error: Failed to create branched interaction node: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"An error occurred while creating the branch: {str(e)}",
+        )
+
+
+# --- REFACTORED: get_interaction_node_by_id ---
+@app.get(
+    "/interaction-nodes/{node_id}",
+    response_model=models.InteractionNode,  # Optional[models.InteractionNode] if service can return None
+    status_code=status.HTTP_200_OK,
+    tags=["Interaction Nodes"],
+)
+async def get_interaction_node_by_id_endpoint(  # Renamed
+    node_id: str,
+    current_user_id: str = Depends(get_current_user_id_from_header),
+    graph_svc: GraphDBService = Depends(get_graph_service),
+):
+    try:
+        node = await graph_svc.get_interaction_node_by_id(
+            node_id=node_id, user_id=current_user_id
+        )
+        if node is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Topic not found to update.",
+                detail=f"InteractionNode with ID '{node_id}' not found or not owned by user.",
             )
-    except HTTPException:
-        raise  # Re-raise HTTPException directly
+        return node
+    except HTTPException:  # Re-raise 404
+        raise
     except Exception as e:
-        print(f"Error updating topic: {e}")
+        print(f"API Error: Failed to get interaction node {node_id}: {e}")
         raise HTTPException(
-            status_code=500,
-            detail=f"An error occurred while updating the topic: {str(e)}",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"An error occurred while retrieving InteractionNode '{node_id}'.",
         )
 
 
-@app.delete(
-    "/topics/{topic_id}", status_code=status.HTTP_204_NO_CONTENT, tags=["Topics"]
+@app.get(
+    "/interaction-nodes/{start_node_id}/graph",
+    response_model=models.GraphData,
+    status_code=status.HTTP_200_OK,
+    tags=["Interaction Nodes"],
 )
-async def delete_topic(topic_id: str, db: Neo4jConnection = Depends(get_db)):
+async def get_interaction_graph_endpoint(
+    start_node_id: str,
+    current_user_id: str = Depends(get_current_user_id_from_header),
+    graph_svc: GraphDBService = Depends(get_graph_service),
+):
     """
-    Delete a topic by its ID.
-    If the topic exists, it will be deleted.
-    If the topic does not exist, a 404 error will be returned.
+    Retrieves the entire explorable graph (nodes and relationships) starting
+    from the given start_node_id, ensuring all elements belong to the
+    authenticated user.
     """
-    # First, check if the topic exists to provide a proper 404 if not.
-    # Then, delete it. We can do this in a way that returns information about the deletion.
-    # This query attempts to match the node, then uses a WITH clause to pass the node
-    # (if found) to the DETACH DELETE part. It returns the count of nodes found *before* deletion.
-    query = (
-        "MATCH (t:Topic {id: $topic_id}) "
-        "WITH t, count(t) AS nodes_found "  # Count matching nodes
-        "WHERE nodes_found > 0 "  # Proceed only if node was found
-        "DETACH DELETE t "  # Delete the node and its relationships
-        "RETURN nodes_found"  # Return the original count
-    )
-    # If the node doesn't exist initially, the MATCH will find nothing,
-    # nodes_found will effectively be 0 for that non-existent node path,
-    # and DETACH DELETE won't run. We need a way to return 0 if not found.
-
-    # A slightly different approach to ensure we know if it was found:
-    # 1. Try to match.
-    # 2. If matched, then detach delete.
-    # We can use the summary information from the driver, or structure the query carefully.
-
-    # Let's use a query that conditionally deletes and tells us if it did.
-    # This query will return the ID if deleted, or null if not found.
-    query_delete_and_check = (
-        "MATCH (t:Topic {id: $topic_id}) "
-        "DETACH DELETE t "
-        "RETURN t.id AS deleted_id"  # This will only return if a node was actually deleted
-        # and t was bound before deletion.
-        # However, after DELETE, 't' is gone.
-        # A better way for Neo4j 4.x+ is to return a count from delete.
-        # Let's try to get a summary or a conditional return.
-        # Simpler for now: Try to delete. If the node doesn't exist, DETACH DELETE does nothing.
-        # We need to check if it existed *before* trying to delete for a clean 404.
-    )
-
-    # Approach: 1. Check existence. 2. If exists, delete.
-    check_query = "MATCH (t:Topic {id: $topic_id}) RETURN count(t) AS count"
-    delete_query = "MATCH (t:Topic {id: $topic_id}) DETACH DELETE t"
-    parameters = {"topic_id": topic_id}
-
     try:
-        # Check if topic exists
-        check_results = db.query(check_query, parameters)
-        if not check_results or check_results[0]["count"] == 0:
+        graph_data = await graph_svc.get_interaction_graph(  # <--- CORRECTED
+            start_node_id=start_node_id, user_id=current_user_id
+        )
+        if graph_data is None:
+            # This implies the start_node_id itself was not found or not owned by the user
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Topic not found to delete.",
+                detail=f"Start node with ID '{start_node_id}' not found or not owned by user.",
             )
-
-        # If it exists, delete it
-        # The DETACH DELETE query doesn't return rows, so db.query() will return an empty list.
-        # We rely on it not throwing an error if successful.
-        db.query(delete_query, parameters)
-
-        # If delete was successful, FastAPI automatically returns 204 No Content
-        # because the function doesn't explicitly return a body and status_code is 204.
-        return None  # Explicitly return None for 204
-
-    except HTTPException:
-        raise  # Re-raise HTTPException directly (like our 404)
+        # If graph_data.nodes is empty but graph_data is not None, it means the start node was found
+        # but had no connected path (e.g., an isolated node). This is a valid graph.
+        return graph_data
+    except HTTPException:  # Re-raise 404
+        raise
     except Exception as e:
-        print(f"Error deleting topic: {e}")
+        print(
+            f"API Error: Failed to get interaction graph for start_node {start_node_id}: {e}"
+        )
         raise HTTPException(
-            status_code=500,
-            detail=f"An error occurred while deleting the topic: {str(e)}",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"An error occurred while retrieving the interaction graph: {str(e)}",
         )
 
+
+# --- Mangum Handler (no changes needed) ---
+from mangum import Mangum
 
 handler = Mangum(app, lifespan="on")
