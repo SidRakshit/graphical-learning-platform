@@ -107,3 +107,33 @@ variable "ecr_repository_name" {
   type        = string
   default     = "" // We'll construct this in main.tf using project/environment names
 }
+
+variable "langfuse_public_key" {
+  description = "The public key for the Langfuse project."
+  type        = string
+  sensitive   = true
+}
+
+variable "langfuse_secret_key" {
+  description = "The secret key for the Langfuse project."
+  type        = string
+  sensitive   = true
+}
+
+variable "langfuse_host" {
+  description = "The host URL for the Langfuse API (e.g., https://cloud.langfuse.com)."
+  type        = string
+  default     = "https://cloud.langfuse.com"
+}
+
+variable "mlflow_db_username" {
+  description = "The username for the MLFlow RDS database."
+  type        = string
+  default     = "mlflowadmin"
+}
+
+variable "mlflow_db_password" {
+  description = "The password for the MLFlow RDS database. Must be at least 8 characters."
+  type        = string
+  sensitive   = true
+}

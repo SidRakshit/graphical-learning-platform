@@ -110,3 +110,18 @@ output "api_gateway_endpoint_url" {
   description = "The invocation URL for the HTTP API Gateway default stage."
   value       = aws_apigatewayv2_stage.default_stage.invoke_url
 }
+
+output "langfuse_credentials_secret_arn" {
+  description = "The ARN of the AWS Secrets Manager secret for Langfuse credentials."
+  value       = aws_secretsmanager_secret.langfuse_credentials.arn
+}
+
+output "mlflow_ui_url" {
+  description = "The URL for the MLFlow Tracking Server UI."
+  value       = "http://${aws_lb.mlflow_alb.dns_name}"
+}
+
+output "mlflow_tracking_uri" {
+  description = "The Tracking URI to set in your ML clients (e.g., mlflow.set_tracking_uri())."
+  value       = "http://${aws_lb.mlflow_alb.dns_name}"
+}
