@@ -1,4 +1,5 @@
 fastapi
-uvicorn
+uvicorn[standard]
+mangum
 neo4j
 boto3
