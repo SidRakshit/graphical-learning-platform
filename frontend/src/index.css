@@ -1,3 +1,23 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+.react-flow__node {
+  @apply bg-white border border-gray-200 rounded-lg shadow-sm p-4;
+}
+
+.react-flow__node:hover {
+  @apply shadow-md;
+}
+
+.react-flow__handle {
+  @apply w-3 h-3 bg-blue-500;
+}
+
+.react-flow__edge-path {
+  @apply stroke-blue-500 stroke-2;
+}
+
 :root {
   font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
   line-height: 1.5;
