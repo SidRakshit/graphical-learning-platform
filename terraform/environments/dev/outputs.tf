@@ -1,4 +1,4 @@
-// terraform/environments/dev/outputs.tf
+// graphical-learning-platform/terraform/environments/dev/outputs.tf
 
 output "vpc_id" {
   description = "The ID of the main VPC created."
@@ -124,4 +124,9 @@ output "mlflow_ui_url" {
 output "mlflow_tracking_uri" {
   description = "The Tracking URI to set in your ML clients (e.g., mlflow.set_tracking_uri())."
   value       = "http://${aws_lb.mlflow_alb.dns_name}"
+}
+
+output "huggingface_token_secret_arn" {
+  description = "The ARN of the AWS Secrets Manager secret for Langfuse credentials."
+  value       = aws_secretsmanager_secret.huggingface_token.arn
 }

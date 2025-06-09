@@ -1,3 +1,5 @@
+// graphical-learning-platform/terraform/environments/dev/networking.tf
+
 // --- Virtual Private Cloud (VPC) ---
 resource "aws_vpc" "main" {
   cidr_block           = var.vpc_cidr_block         // From variables.tf

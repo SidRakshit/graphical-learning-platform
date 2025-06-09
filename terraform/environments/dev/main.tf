@@ -1,4 +1,4 @@
-// terraform/environments/dev/main.tf
+// graphical-learning-platform/terraform/environments/dev/main.tf
 
 terraform {
   required_providers {

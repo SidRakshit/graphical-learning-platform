@@ -1,3 +1,5 @@
+// graphical-learning-platform/terraform/environments/dev/storage.tf
+
 // --- S3 Buckets for ML ---
 resource "aws_s3_bucket" "ml_datasets_bucket" {
   bucket = local.actual_ml_datasets_bucket_name

@@ -1,3 +1,5 @@
+// graphical-learning-platform/terraform/environments/dev/security.tf
+
 // --- Security Group for SSH Access ---
 resource "aws_security_group" "allow_ssh" {
   name        = "${var.project_name}-allow-ssh-${var.environment_name}"

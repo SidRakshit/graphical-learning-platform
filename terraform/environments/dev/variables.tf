@@ -1,4 +1,4 @@
-// terraform/environments/dev/variables.tf
+// graphical-learning-platform/terraform/environments/dev/variables.tf
 
 variable "aws_region" {
   description = "The AWS region where resources will be deployed."
@@ -134,6 +134,23 @@ variable "mlflow_db_username" {
 
 variable "mlflow_db_password" {
   description = "The password for the MLFlow RDS database. Must be at least 8 characters."
+  type        = string
+  sensitive   = true
+}
+
+variable "jumpstart_account_ids" {
+  description = "A map of AWS regions to the AWS account IDs that host SageMaker JumpStart models."
+  type        = map(string)
+  default = {
+    "us-east-1" = "763104351884"
+    "us-west-2" = "241505072960"
+    "eu-west-1" = "813267921239"
+    // Add other regions as needed
+  }
+}
+
+variable "huggingface_hub_token" {
+  description = "Hugging Face Hub token for downloading models"
   type        = string
   sensitive   = true
 }

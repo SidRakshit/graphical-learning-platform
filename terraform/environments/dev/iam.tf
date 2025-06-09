@@ -1,3 +1,5 @@
+// graphical-learning-platform/terraform/environments/dev/iam.tf
+
 // --- IAM Role for Lambda Execution (for FastAPI Backend) ---
 resource "aws_iam_role" "lambda_execution_role" {
   name = "${var.project_name}-lambda-execution-role-${var.environment_name}"
@@ -111,4 +113,43 @@ resource "aws_iam_policy" "mlflow_s3_access_policy" {
 resource "aws_iam_role_policy_attachment" "mlflow_s3_access_attachment" {
   role       = aws_iam_role.mlflow_ecs_task_execution_role.name
   policy_arn = aws_iam_policy.mlflow_s3_access_policy.arn
+}
+
+// --- IAM Role for SageMaker Execution ---
+resource "aws_iam_role" "sagemaker_execution_role" {
+  name = "${var.project_name}-sagemaker-execution-role-${var.environment_name}"
+
+  assume_role_policy = jsonencode({
+    Version   = "2012-10-17",
+    Statement = [{
+      Action    = "sts:AssumeRole",
+      Effect    = "Allow",
+      Principal = { Service = "sagemaker.amazonaws.com" }
+    }]
+  })
+
+  tags = merge(local.common_tags, {
+    Name = "${var.project_name}-sagemaker-exec-role-${var.environment_name}"
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "sagemaker_full_access_policy" {
+  role       = aws_iam_role.sagemaker_execution_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonSageMakerFullAccess"
+}
+
+// --- IAM Policy for Lambda to Invoke SageMaker Endpoint ---
+resource "aws_iam_policy" "lambda_sagemaker_invoke_policy" {
+  name        = "${var.project_name}-lambda-sagemaker-invoke-policy-${var.environment_name}"
+  description = "Allows Lambda to invoke the SageMaker model endpoint"
+
+  policy = jsonencode({
+    Version   = "2012-10-17",
+    Statement = [{
+      Action   = "sagemaker:InvokeEndpoint",
+      Effect   = "Allow",
+      // CHANGE THIS LINE
+      Resource = aws_sagemaker_endpoint.gemma_2b_it_endpoint.arn
+    }]
+  })
 }

@@ -1,6 +1,8 @@
+// graphical-learning-platform/terraform/environments/dev/application.tf
+
 // --- AWS Secrets Manager for AuraDB Credentials ---
 resource "aws_secretsmanager_secret" "auradb_credentials" {
-  name        = "${var.project_name}-auradb-credentials-${var.environment_name}"
+  name        = "${var.project_name}-auradb-credentials-v2-${var.environment_name}"
   description = "Credentials for Neo4j AuraDB instance"
 
   tags = merge(local.common_tags, {
@@ -120,6 +122,7 @@ resource "aws_lambda_function" "fastapi_lambda" {
     variables = {
       AURADB_SECRET_ARN   = aws_secretsmanager_secret.auradb_credentials.arn
       LANGFUSE_SECRET_ARN = aws_secretsmanager_secret.langfuse_credentials.arn
+      SAGEMAKER_ENDPOINT_NAME = aws_sagemaker_endpoint.gemma_2b_it_endpoint.name
     }
   }
 
