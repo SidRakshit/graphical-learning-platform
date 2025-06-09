@@ -50,14 +50,19 @@ resource "aws_ecs_task_definition" "mlflow_task" {
   requires_compatibilities = ["FARGATE"]
   cpu                      = "1024"
   memory                   = "2048"
+  runtime_platform {
+    operating_system_family = "LINUX"
+    cpu_architecture        = "ARM64"
+  }
   execution_role_arn       = aws_iam_role.mlflow_ecs_task_execution_role.arn
   task_role_arn            = aws_iam_role.mlflow_ecs_task_execution_role.arn
 
   container_definitions = jsonencode([
     {
       name      = "mlflow-server"
-      image     = "ghcr.io/mlflow/mlflow:v2.13.0"
+      image     = aws_ecr_repository.mlflow_server_repo.repository_url
       command = [
+        "mlflow",
         "server",
         "--host", "0.0.0.0",
         "--port", "5000",
@@ -140,4 +145,9 @@ resource "aws_ecs_service" "mlflow_service" {
   tags = merge(local.common_tags, {
     Name = "${var.project_name}-mlflow-service-${var.environment_name}"
   })
+}
+
+resource "aws_ecr_repository" "mlflow_server_repo" {
+  name = "${var.project_name}-mlflow-server-${var.environment_name}"
+  tags = local.common_tags
 }

@@ -7,6 +7,7 @@ from typing import List, Optional
 from db import get_db_connection, close_db_connection, Neo4jConnection
 import models  # Your Pydantic models from models.py
 from graph_service import GraphDBService  # Import the new service
+from sagemaker_service import SageMakerService
 
 import uuid  # Not directly used here anymore for node ID generation if service handles it
 from datetime import (
@@ -79,6 +80,11 @@ def get_graph_service(
     return GraphDBService(db_connection=db_conn)
 
 
+def get_sagemaker_service() -> SageMakerService:
+    """Dependency to provide an instance of SageMakerService."""
+    return SageMakerService()
+
+
 # --- Root and DB Test Endpoints (No changes needed, but ensure db_test uses get_db_conn) ---
 @app.get("/")
 async def root():
@@ -118,14 +124,19 @@ async def test_db_connection(
 async def create_root_interaction_node_endpoint(  # Renamed to avoid confusion with service method
     payload: models.RootInteractionNodeCreate,
     current_user_id: str = Depends(get_current_user_id_from_header),
-    graph_svc: GraphDBService = Depends(get_graph_service),  # Inject graph service
+    graph_svc: GraphDBService = Depends(get_graph_service),
+    sagemaker_svc: SageMakerService = Depends(get_sagemaker_service),
 ):
     # Placeholder for LLM Interaction - this part remains in the API layer for now
     # In a more complex app, this might also be a separate service.
-    llm_response_text = f"This is a placeholder LLM response to your prompt: '{payload.user_prompt}' for user {current_user_id}"
+    # llm_response_text = f"This is a placeholder LLM response to your prompt: '{payload.user_prompt}' for user {current_user_id}"
 
     try:
         # Call the graph service to create the node
+        print(f"Invoking SageMaker endpoint for prompt: '{payload.user_prompt}'")
+        llm_response_text = sagemaker_svc.generate_text(payload.user_prompt)
+        print("Successfully received response from SageMaker.")
+
         created_node = await graph_svc.create_root_interaction_node(
             user_id=current_user_id,
             user_prompt=payload.user_prompt,
@@ -155,11 +166,16 @@ async def create_branched_interaction_node_endpoint(  # Renamed
     payload: models.InteractionNodeCreate,
     current_user_id: str = Depends(get_current_user_id_from_header),
     graph_svc: GraphDBService = Depends(get_graph_service),
+    sagemaker_svc: SageMakerService = Depends(get_sagemaker_service),
 ):
     # Placeholder LLM call
-    llm_response_text = f"Placeholder LLM response for branch from {parent_node_id} to '{payload.user_prompt}' by {current_user_id}"
+    # llm_response_text = f"Placeholder LLM response for branch from {parent_node_id} to '{payload.user_prompt}' by {current_user_id}"
 
     try:
+        print(f"Invoking SageMaker endpoint for branch prompt: '{payload.user_prompt}'")
+        llm_response_text = sagemaker_svc.generate_text(payload.user_prompt)
+        print("Successfully received response from SageMaker.")
+
         branched_node = await graph_svc.create_branched_interaction_node(
             parent_node_id=parent_node_id,
             user_id=current_user_id,

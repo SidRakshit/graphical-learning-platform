@@ -13,8 +13,8 @@ from botocore.exceptions import ClientError
 # SECRET_NAME_OR_ARN = os.environ.get("AURADB_SECRET_ARN", "YOUR_AURADB_SECRET_ARN_HERE")
 # AWS_REGION_NAME = os.environ.get("AWS_REGION", "us-east-1") # Ensure this is your AWS region
 
-SECRET_NAME_OR_ARN = "***REMOVED***"
-AWS_REGION_NAME = "us-east-1"
+SECRET_NAME_OR_ARN = os.environ.get("AURADB_SECRET_ARN")
+AWS_REGION_NAME = os.environ.get("AWS_REGION")
 
 
 # --- Global Neo4j Driver Variable ---
