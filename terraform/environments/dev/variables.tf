@@ -1,4 +1,4 @@
-// terraform/environments/dev/variables.tf
+// graphical-learning-platform/terraform/environments/dev/variables.tf
 
 variable "aws_region" {
   description = "The AWS region where resources will be deployed."
@@ -60,3 +60,97 @@ variable "my_ip_address" {
   type        = string
   }
   
+  variable "auradb_connection_uri" {
+  description = "The Connection URI for the Neo4j AuraDB instance."
+  type        = string
+  sensitive   = true // Marks this variable as sensitive
+}
+
+variable "auradb_username" {
+  description = "The username for the Neo4j AuraDB instance."
+  type        = string
+  sensitive   = true
+}
+
+variable "auradb_password" {
+  description = "The password for the Neo4j AuraDB instance."
+  type        = string
+  sensitive   = true
+}
+
+variable "ml_datasets_bucket_name" {
+  description = "The name for the S3 bucket to store ML datasets."
+  type        = string
+  default     = "" // We'll construct this in main.tf or you can set a full name here
+}
+
+variable "ml_models_bucket_name" {
+  description = "The name for the S3 bucket to store ML models and artifacts."
+  type        = string
+  default     = "" // We'll construct this in main.tf or you can set a full name here
+}
+
+variable "app_callback_urls" {
+  description = "A list of allowed callback URLs for your application after sign-in."
+  type        = list(string)
+  default     = ["http://localhost:3000/callback"] // Placeholder for local Next.js dev
+}
+
+variable "app_logout_urls" {
+  description = "A list of allowed logout URLs for your application."
+  type        = list(string)
+  default     = ["http://localhost:3000/login"] // Placeholder for local Next.js dev
+}
+
+variable "ecr_repository_name" {
+  description = "Name for the ECR repository to store the backend Docker image."
+  type        = string
+  default     = "" // We'll construct this in main.tf using project/environment names
+}
+
+variable "langfuse_public_key" {
+  description = "The public key for the Langfuse project."
+  type        = string
+  sensitive   = true
+}
+
+variable "langfuse_secret_key" {
+  description = "The secret key for the Langfuse project."
+  type        = string
+  sensitive   = true
+}
+
+variable "langfuse_host" {
+  description = "The host URL for the Langfuse API (e.g., https://cloud.langfuse.com)."
+  type        = string
+  default     = "https://cloud.langfuse.com"
+}
+
+variable "mlflow_db_username" {
+  description = "The username for the MLFlow RDS database."
+  type        = string
+  default     = "mlflowadmin"
+}
+
+variable "mlflow_db_password" {
+  description = "The password for the MLFlow RDS database. Must be at least 8 characters."
+  type        = string
+  sensitive   = true
+}
+
+variable "jumpstart_account_ids" {
+  description = "A map of AWS regions to the AWS account IDs that host SageMaker JumpStart models."
+  type        = map(string)
+  default = {
+    "us-east-1" = "763104351884"
+    "us-west-2" = "241505072960"
+    "eu-west-1" = "813267921239"
+    // Add other regions as needed
+  }
+}
+
+variable "huggingface_hub_token" {
+  description = "Hugging Face Hub token for downloading models"
+  type        = string
+  sensitive   = true
+}

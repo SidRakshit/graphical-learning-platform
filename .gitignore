@@ -6,3 +6,5 @@
 *.secret.tfvars
 *.secret
 *.pem
+__pycache__
+.venv/

@@ -1,0 +1,5 @@
+fastapi
+uvicorn[standard]
+mangum
+neo4j
+boto3
