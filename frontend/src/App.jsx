@@ -139,6 +139,8 @@ const Flow = () => {
       targetHandle: 'target',
       type: 'smoothstep',
       markerEnd: { type: MarkerType.ArrowClosed },
+      animated: true,
+      style: { stroke: '#64748b' }
     };
     
     const responseEdge = {
@@ -149,6 +151,8 @@ const Flow = () => {
       targetHandle: 'target',
       type: 'smoothstep',
       markerEnd: { type: MarkerType.ArrowClosed },
+      animated: true,
+      style: { stroke: '#64748b' }
     };
     
     setNodes(prevNodes => [...prevNodes, userNode, responseNode]);
@@ -339,6 +343,16 @@ const Flow = () => {
     setNodeCounter(1);
   };
 
+  const onConnect = useCallback((params) => {
+    console.log('Connection params:', params);
+    return true; // Allow all connections
+  }, []);
+
+  const isValidConnection = useCallback((connection) => {
+    console.log('Validating connection:', connection);
+    return true; // Allow all connections for now
+  }, []);
+
   if (!user) {
     return <LoginModal onLogin={handleLogin} />;
   }
@@ -350,6 +364,8 @@ const Flow = () => {
         edges={edges}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
+        onConnect={onConnect}
+        isValidConnection={isValidConnection}
         nodeTypes={nodeTypes}
         fitView
       >

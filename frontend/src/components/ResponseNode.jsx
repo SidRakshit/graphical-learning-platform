@@ -25,6 +25,8 @@ const ResponseNodeComponent = ({ data }) => {
         position={Position.Top} 
         id="target"
         className="w-3 h-3 bg-gray-900 !opacity-100" 
+        isConnectable={true}
+        style={{ background: '#64748b' }}
       />
       
       <div className="space-y-4">
@@ -69,6 +71,8 @@ const ResponseNodeComponent = ({ data }) => {
           position={Position.Bottom} 
           id="source"
           className="w-3 h-3 bg-gray-900 !opacity-100" 
+          isConnectable={true}
+          style={{ background: '#64748b' }}
         />
       )}
     </div>
