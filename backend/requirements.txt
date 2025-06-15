@@ -3,3 +3,4 @@ uvicorn[standard]
 mangum
 neo4j
 boto3
+openai

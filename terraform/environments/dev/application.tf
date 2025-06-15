@@ -2,7 +2,7 @@
 
 # --- AWS Secrets Manager for AuraDB Credentials ---
 resource "aws_secretsmanager_secret" "auradb_credentials" {
-  name        = "${var.project_name}-auradb-credentials-v2-${var.environment_name}"
+  name        = "${var.project_name}-auradb-credentials-v3-${var.environment_name}"
   description = "Credentials for Neo4j AuraDB instance"
 
   tags = merge(local.common_tags, {
