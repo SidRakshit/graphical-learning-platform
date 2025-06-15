@@ -1,6 +1,6 @@
 // graphical-learning-platform/terraform/environments/dev/application.tf
 
-// --- AWS Secrets Manager for AuraDB Credentials ---
+# --- AWS Secrets Manager for AuraDB Credentials ---
 resource "aws_secretsmanager_secret" "auradb_credentials" {
   name        = "${var.project_name}-auradb-credentials-v2-${var.environment_name}"
   description = "Credentials for Neo4j AuraDB instance"
@@ -19,7 +19,7 @@ resource "aws_secretsmanager_secret_version" "auradb_credentials_version" {
   })
 }
 
-// --- AWS Cognito User Pool ---
+# --- AWS Cognito User Pool ---
 resource "aws_cognito_user_pool" "main_pool" {
   name = "${var.project_name}-user-pool-${var.environment_name}"
 
@@ -63,7 +63,7 @@ resource "aws_cognito_user_pool" "main_pool" {
   }
 }
 
-// --- AWS Cognito User Pool Client ---
+# --- AWS Cognito User Pool Client ---
 resource "aws_cognito_user_pool_client" "app_client" {
   name         = "${var.project_name}-app-client-${var.environment_name}"
   user_pool_id = aws_cognito_user_pool.main_pool.id
@@ -89,7 +89,7 @@ resource "aws_cognito_user_pool_client" "app_client" {
   prevent_user_existence_errors = "ENABLED"
 }
 
-// --- ECR Repository for Backend Docker Image ---
+# --- ECR Repository for Backend Docker Image ---
 resource "aws_ecr_repository" "backend_api_repo" {
   name                 = local.actual_ecr_repository_name
   image_tag_mutability = "MUTABLE"
@@ -103,7 +103,7 @@ resource "aws_ecr_repository" "backend_api_repo" {
   })
 }
 
-// --- AWS Lambda Function for FastAPI Backend ---
+# --- AWS Lambda Function for FastAPI Backend ---
 resource "aws_lambda_function" "fastapi_lambda" {
   function_name = "${var.project_name}-backend-api-${var.environment_name}"
   role          = aws_iam_role.lambda_execution_role.arn
@@ -113,16 +113,13 @@ resource "aws_lambda_function" "fastapi_lambda" {
   memory_size   = 512
   architectures = ["arm64"]
 
-  vpc_config {
-    subnet_ids         = [aws_subnet.private_az1.id, aws_subnet.private_az2.id]
-    security_group_ids = [aws_security_group.app_sg.id]
-  }
+  # Lambda will run outside a custom VPC, accessible via API Gateway
+  # No vpc_config needed
 
   environment {
     variables = {
       AURADB_SECRET_ARN   = aws_secretsmanager_secret.auradb_credentials.arn
       LANGFUSE_SECRET_ARN = aws_secretsmanager_secret.langfuse_credentials.arn
-      SAGEMAKER_ENDPOINT_NAME = aws_sagemaker_endpoint.gemma_2b_it_endpoint.name
     }
   }
 
@@ -137,7 +134,7 @@ resource "aws_lambda_function" "fastapi_lambda" {
   ]
 }
 
-// --- API Gateway (HTTP API) ---
+# --- API Gateway (HTTP API) ---
 resource "aws_apigatewayv2_api" "http_api" {
   name          = "${var.project_name}-backend-http-api-${var.environment_name}"
   protocol_type = "HTTP"
