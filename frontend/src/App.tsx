@@ -9,9 +9,9 @@ import {
   Panel,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import InitialNode from './components/InitialNode.jsx';
-import UserNode from './components/UserNode.jsx';
-import ResponseNode from './components/ResponseNode.jsx';
+import InitialNode from './components/InitialNode';
+import UserNode from './components/UserNode';
+import ResponseNode from './components/ResponseNode';
 
 const API_BASE_URL = '/api';
 
