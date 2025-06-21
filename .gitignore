@@ -9,3 +9,6 @@
 __pycache__
 .venv/
 .cursor/
+
+# Local Netlify folder
+.netlify
