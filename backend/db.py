@@ -5,15 +5,7 @@ import boto3
 from neo4j import GraphDatabase, basic_auth
 from botocore.exceptions import ClientError
 
-# --- Configuration for Secrets Manager ---
-# You should have this ARN from your Terraform output (auradb_credentials_secret_arn)
-# For local development, you could set this as an environment variable
-# or for now, you can temporarily hardcode it here for testing,
-# but ideally, it comes from an environment variable or a config system.
-# SECRET_NAME_OR_ARN = os.environ.get("AURADB_SECRET_ARN", "YOUR_AURADB_SECRET_ARN_HERE")
-# AWS_REGION_NAME = os.environ.get("AWS_REGION", "us-east-1") # Ensure this is your AWS region
-
-SECRET_NAME_OR_ARN = os.environ.get("AURADB_SECRET_ARN")
+SECRET_NAME_OR_ARN = os.environ.get("SECRET_NAME_OR_ARN")
 AWS_REGION_NAME = os.environ.get("AWS_REGION")
 
 
@@ -26,7 +18,9 @@ class Neo4jConnection:
     def __init__(self, uri, user, password):
         # Initialize the Neo4j driver
         # This driver instance is thread-safe and typically created once per application
-        self._driver = GraphDatabase.driver(uri, auth=basic_auth(user, password))
+        self._driver = GraphDatabase.driver(
+            uri, auth=basic_auth(user, password), max_connection_lifetime=3600
+        )
 
     def close(self):
         if self._driver is not None:

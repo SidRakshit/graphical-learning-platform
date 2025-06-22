@@ -1,3 +1,8 @@
+# backend/main.py
+from dotenv import load_dotenv
+
+load_dotenv()
+
 from fastapi import FastAPI, HTTPException, Depends, status, Header
 from contextlib import asynccontextmanager
 from typing import List, Optional
@@ -40,15 +45,14 @@ app = FastAPI(lifespan=lifespan)
 
 # Initialize OpenAI client globally or within a dependency
 # It's good practice to get the API key from environment variables
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-if not OPENAI_API_KEY:
-    print(
-        "WARNING: OPENAI_API_KEY environment variable not set. OpenAI API calls will fail."
-    )
-    # In a production environment, you might want to raise an error here
-    # raise Exception("OPENAI_API_KEY environment variable not set.")
-
-openai_client = OpenAI(api_key=OPENAI_API_KEY)
+# OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+# if not OPENAI_API_KEY:
+#     print(
+#         "WARNING: OPENAI_API_KEY environment variable not set. OpenAI API calls will fail."
+#     )
+# In a production environment, you might want to raise an error here
+# raise Exception("OPENAI_API_KEY environment variable not set.")
+openai_client = OpenAI()
 
 
 # --- Database Dependency ---
@@ -85,13 +89,6 @@ def get_graph_service(
     return GraphDBService(db_connection=db_conn)
 
 
-# SageMakerService dependency removed
-# def get_sagemaker_service() -> SageMakerService:
-#     """Dependency to provide an instance of SageMakerService."""
-#     return SageMakerService()
-
-
-# --- Root and DB Test Endpoints ---
 @app.get("/")
 async def root():
     return {"message": "Hello World - Backend API is running!"}
@@ -118,7 +115,6 @@ async def test_db_connection(
         raise HTTPException(status_code=500, detail=f"Database query failed: {str(e)}")
 
 
-# --- REFACTORED: create_root_interaction_node ---
 @app.post(
     "/interaction-nodes/start",
     response_model=models.InteractionNode,
@@ -135,7 +131,7 @@ async def create_root_interaction_node_endpoint(
         print(f"Calling OpenAI API for prompt: '{payload.user_prompt}'")
         # Make the OpenAI API call
         chat_completion = openai_client.chat.completions.create(
-            model="gpt-3.5-turbo",  # Or your preferred OpenAI model, e.g., "gpt-4o"
+            model="gpt-4o-2024-08-06",  # Or your preferred OpenAI model, e.g., "gpt-4o"
             messages=[
                 {
                     "role": "system",
@@ -162,7 +158,6 @@ async def create_root_interaction_node_endpoint(
         )
 
 
-# --- REFACTORED: create_branched_interaction_node ---
 @app.post(
     "/interaction-nodes/{parent_node_id}/branch",
     response_model=models.InteractionNode,
@@ -177,17 +172,25 @@ async def create_branched_interaction_node_endpoint(
     # sagemaker_svc: SageMakerService = Depends(get_sagemaker_service), # Removed SageMaker dependency
 ):
     try:
+        messages_for_llm = [
+            {
+                "role": "system",
+                "content": "You are a skilled teacher. Follow the agreed learning path and method specifics by which the user wishes to learn (details, high-level overview, examples, analogies etc.). Ask questions at the end to learn more about the user and to identify which direction they which to go down.",
+            }
+        ]
+
+        if payload.context_messages:
+            messages_for_llm.extend(
+                [msg.model_dump() for msg in payload.context_messages]
+            )
+
+        messages_for_llm.append({"role": "user", "content": payload.user_prompt})
+
         print(f"Calling OpenAI API for branch prompt: '{payload.user_prompt}'")
         # Make the OpenAI API call
         chat_completion = openai_client.chat.completions.create(
-            model="gpt-3.5-turbo",  # Or your preferred OpenAI model
-            messages=[
-                {
-                    "role": "system",
-                    "content": "You are a skilled teacher. Follow the agreed learning path and method specifics by which the user wishes to learn (details, high-level overview, examples, analogies etc.). Ask questions at the end to learn more about the user and to identify which direction they which to go down.",
-                },
-                {"role": "user", "content": payload.user_prompt},
-            ],
+            model="gpt-4o-2024-08-06",  # Or your preferred OpenAI model
+            messages=messages_for_llm,
         )
         llm_response_text = chat_completion.choices[0].message.content
         print("Successfully received response from OpenAI.")
@@ -198,6 +201,7 @@ async def create_branched_interaction_node_endpoint(
             user_prompt=payload.user_prompt,
             summary_title=payload.summary_title,
             llm_response=llm_response_text,
+            context_messages=payload.context_messages,
         )
         return branched_node
     except ValueError as ve:
