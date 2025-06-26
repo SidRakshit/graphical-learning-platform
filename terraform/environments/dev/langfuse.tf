@@ -1,8 +1,8 @@
 // graphical-learning-platform/terraform/environments/dev/langfuse.tf
 
-// --- AWS Secrets Manager for Langfuse Credentials ---
+# --- AWS Secrets Manager for Langfuse Credentials ---
 resource "aws_secretsmanager_secret" "langfuse_credentials" {
-  name        = "${var.project_name}-langfuse-credentials-v2-${var.environment_name}"
+  name        = "${var.project_name}-langfuse-credentials-v3-${var.environment_name}"
   description = "Credentials for the Langfuse Cloud service"
 
   tags = merge(local.common_tags, {

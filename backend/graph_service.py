@@ -1,4 +1,5 @@
 # backend/graph_service.py
+import json
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 import uuid
@@ -85,6 +86,7 @@ class GraphDBService:
         user_prompt: str,
         summary_title: Optional[str],
         llm_response: str,  # LLM response is passed in
+        context_messages: Optional[List[models.Message]],
     ) -> models.InteractionNode:
         """
         Creates a new branched InteractionNode and links it to a parent.
@@ -108,6 +110,12 @@ class GraphDBService:
         new_node_id = str(uuid.uuid4())
         current_timestamp = datetime.utcnow()
 
+        db_context_messages_json = (
+            json.dumps([msg.model_dump() for msg in context_messages])
+            if context_messages
+            else None
+        )
+
         create_branch_query = """
         CREATE (b:InteractionNode {
             node_id: $node_id,
@@ -116,11 +124,13 @@ class GraphDBService:
             timestamp: $timestamp,
             summary_title: $summary_title,
             is_starting_node: false,
-            user_id: $user_id_param
+            user_id: $user_id_param,
+            context_messages: $context_messages
         })
         RETURN b.node_id AS node_id, b.user_prompt AS user_prompt, b.llm_response AS llm_response,
                b.timestamp AS timestamp, b.summary_title AS summary_title,
-               b.is_starting_node AS is_starting_node, b.user_id AS user_id
+               b.is_starting_node AS is_starting_node, b.user_id AS user_id,
+               b.context_messages as context_messages
         """
         branch_node_params = {
             "node_id": new_node_id,
@@ -129,6 +139,7 @@ class GraphDBService:
             "timestamp": current_timestamp,
             "summary_title": summary_title,
             "user_id_param": user_id,
+            "context_messages": db_context_messages_json,
         }
 
         branch_node_results = self.db_conn.query(
@@ -138,6 +149,13 @@ class GraphDBService:
             raise Exception("Failed to create branched interaction node in database.")
 
         newly_created_node_data = dict(branch_node_results[0])
+
+        if newly_created_node_data.get("context_messages") and isinstance(
+            newly_created_node_data["context_messages"], str
+        ):
+            newly_created_node_data["context_messages"] = json.loads(
+                newly_created_node_data["context_messages"]
+            )
 
         # 3. Create the :BRANCHED_TO relationship
         link_query = """
@@ -187,7 +205,8 @@ class GraphDBService:
         RETURN
             i.node_id AS node_id, i.user_prompt AS user_prompt, i.llm_response AS llm_response,
             i.timestamp AS timestamp, i.summary_title AS summary_title,
-            i.is_starting_node AS is_starting_node, i.user_id AS user_id
+            i.is_starting_node AS is_starting_node, i.user_id AS user_id,
+            i.context_messages AS context_messages
         LIMIT 1
         """
         params = {"node_id": node_id, "user_id_param": user_id}
@@ -197,6 +216,12 @@ class GraphDBService:
             return None
 
         node_data = dict(results[0])
+
+        if node_data.get("context_messages") and isinstance(
+            node_data["context_messages"], str
+        ):
+            node_data["context_messages"] = json.loads(node_data["context_messages"])
+
         if "timestamp" in node_data and not isinstance(
             node_data["timestamp"], datetime
         ):
@@ -246,7 +271,8 @@ class GraphDBService:
                     timestamp: node.timestamp,
                     summary_title: node.summary_title,
                     is_starting_node: node.is_starting_node,
-                    user_id: node.user_id
+                    user_id: node.user_id,
+                    context_messages: node.context_messages
                 }] AS nodes,
                 [r IN graphRelationships | {
                     source: startNode(r).node_id,
@@ -286,6 +312,12 @@ class GraphDBService:
             # Process nodes: convert timestamps
             processed_nodes = []
             for node_dict in raw_graph_data.get("nodes", []):
+                if node_dict.get("context_messages") and isinstance(
+                    node_dict["context_messages"], str
+                ):
+                    node_dict["context_messages"] = json.loads(
+                        node_dict["context_messages"]
+                    )
                 if "timestamp" in node_dict and not isinstance(
                     node_dict["timestamp"], datetime
                 ):

@@ -20,11 +20,23 @@ class InteractionNodeBase(BaseModel):
     )
 
 
+class Message(BaseModel):
+    role: str = Field(
+        ...,
+        description="The role of the message sender (e.g., 'user', 'assistant', 'system').",
+    )
+    content: str = Field(..., description="The content of the message.")
+
+
 # Payload for creating any new interaction node (root or branch)
 # User ID will be injected by the endpoint from authenticated user context
 class InteractionNodeCreate(BaseModel):
     user_prompt: str = Field(..., min_length=1, max_length=5000)
     summary_title: Optional[str] = Field(None, max_length=200)
+    context_messages: Optional[List[Message]] = Field(
+        None,
+        description="A list of previous messages to provide context to the LLM for generation. Typically includes alternating user/assistant messages.",
+    )
 
 
 # Payload for creating a new ROOT interaction node.
@@ -59,6 +71,9 @@ class InteractionNode(InteractionNodeBase):
     user_id: str = Field(
         description="The ID of the user who initiated this interaction."
     )
+    context_messages: Optional[List[Message]] = Field(
+        None, description="The history of messages leading up to this node's creation."
+    )
 
     model_config = {"from_attributes": True}
 
@@ -70,6 +85,9 @@ class InteractionNodeUpdate(BaseModel):
         description="Potentially allow re-generation or manual edit of LLM response.",
     )
     summary_title: Optional[str] = Field(None, max_length=200)
+    context_messages: Optional[List[Message]] = Field(
+        None, description="The history of messages leading up to this node's creation."
+    )
 
 
 # --- NEW: Models for Graph Data ---
