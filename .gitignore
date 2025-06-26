@@ -12,3 +12,5 @@ __pycache__
 
 # Local Netlify folder
 .netlify
+.env.production
+.env.development

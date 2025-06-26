@@ -1,0 +1,2 @@
+/api/* https://58qyzfh8tk.execute-api.us-east-1.amazonaws.com/:splat 200
+/* /index.html 200 

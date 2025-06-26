@@ -7,6 +7,8 @@ import {
   useEdgesState,
   MarkerType,
   Panel,
+  type Node,
+  type Edge,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import InitialNode from './components/InitialNode';
@@ -15,19 +17,38 @@ import ResponseNode from './components/ResponseNode';
 
 const API_BASE_URL = '/api';
 
+// Define types
+interface User {
+  id: string;
+  name: string;
+}
+
+interface NodeData extends Record<string, unknown> {
+  prompt?: string;
+  content?: string;
+  isLoading?: boolean;
+  onPrompt?: (prompt: string) => void;
+  branchCount?: number;
+  nodeId?: string;
+}
+
 const nodeTypes = {
   initial: InitialNode,
   user: UserNode,
   response: ResponseNode,
 };
 
-const LoginModal = ({ onLogin }) => {
+interface LoginModalProps {
+  onLogin: (user: User) => void;
+}
+
+const LoginModal = ({ onLogin }: LoginModalProps) => {
   const [inputValue, setInputValue] = useState('');
 
-  const handleSubmit = (e) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (inputValue.trim()) {
-      const newUser = {
+      const newUser: User = {
         id: inputValue.trim().toLowerCase().replace(/\s+/g, '-'),
         name: inputValue.trim()
       };
@@ -67,12 +88,12 @@ const LoginModal = ({ onLogin }) => {
 };
 
 const Flow = () => {
-  const [nodes, setNodes, onNodesChange] = useNodesState([]);
-  const [edges, setEdges, onEdgesChange] = useEdgesState([]);
-  const [user, setUser] = useState(null);
+  const [nodes, setNodes, onNodesChange] = useNodesState<Node<NodeData>>([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
+  const [user, setUser] = useState<User | null>(null);
   const [nodeCounter, setNodeCounter] = useState(0);
 
-  const handleLogin = (newUser) => {
+  const handleLogin = (newUser: User) => {
     setUser(newUser);
     setNodes([]);
     setEdges([]);
@@ -89,14 +110,14 @@ const Flow = () => {
         type: 'initial',
         position: { x: centerX, y: centerY },
         data: {
-          onPrompt: (prompt) => handleInitialPrompt(prompt, centerX, centerY)
+          onPrompt: (prompt: string) => handleInitialPrompt(prompt, centerX, centerY)
         },
       };
       setNodes([initialNode]);
     }
   }, [user, nodeCounter, nodes.length]);
 
-  const handleInitialPrompt = async (prompt, initialX, initialY) => {
+  const handleInitialPrompt = async (prompt: string, initialX: number, initialY: number) => {
     if (!user || !user.id) {
       console.error('No user available for initial prompt');
       return;
@@ -118,7 +139,7 @@ const Flow = () => {
       position: { x: initialX, y: initialY + 150 },
       data: {
         isLoading: true,
-        onPrompt: (newPrompt) => handleBranch(responseNodeId, newPrompt),
+        onPrompt: (newPrompt: string) => handleBranch(responseNodeId, newPrompt),
         branchCount: 0
       },
     };
@@ -180,7 +201,7 @@ const Flow = () => {
   };
 
   // CORRECTED: Refactored to use functional updates for state setters to avoid stale state
-  const handleBranch = useCallback((sourceResponseNodeId, prompt) => {
+  const handleBranch = useCallback((sourceResponseNodeId: string, prompt: string) => {
     if (!user) {
       console.error("Cannot branch: User is not logged in.");
       return;
@@ -221,7 +242,7 @@ const Flow = () => {
                 position: { x: newUserX, y: newUserY + 150 },
                 data: {
                 isLoading: true,
-                onPrompt: (newPrompt) => handleBranch(newResponseNodeId, newPrompt),
+                onPrompt: (newPrompt: string) => handleBranch(newResponseNodeId, newPrompt),
                 branchCount: 0,
                 },
             };
@@ -312,11 +333,11 @@ const Flow = () => {
     setNodeCounter(1);
   };
 
-  const onConnect = useCallback((params) => {
+  const onConnect = useCallback((params: any) => {
     return true;
   }, []);
 
-  const isValidConnection = useCallback((connection) => {
+  const isValidConnection = useCallback((connection: any) => {
     return true;
   }, []);
 
