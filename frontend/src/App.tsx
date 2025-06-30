@@ -23,6 +23,11 @@ interface User {
   name: string;
 }
 
+interface ChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
 interface NodeData extends Record<string, unknown> {
   prompt?: string;
   content?: string;
@@ -30,6 +35,8 @@ interface NodeData extends Record<string, unknown> {
   onPrompt?: (prompt: string) => void;
   branchCount?: number;
   nodeId?: string;
+  chatHistory?: ChatMessage[]; // Store complete conversation history to this node
+  parentNodeId?: string; // Track parent node for building history
 }
 
 const nodeTypes = {
@@ -93,6 +100,35 @@ const Flow = () => {
   const [user, setUser] = useState<User | null>(null);
   const [nodeCounter, setNodeCounter] = useState(0);
 
+  // Helper function to build chat history for a node by traversing up the tree
+  const buildChatHistory = (nodeId: string, currentNodes: Node<NodeData>[]): ChatMessage[] => {
+    const node = currentNodes.find(n => n.id === nodeId);
+    if (!node) return [];
+
+    const history: ChatMessage[] = [];
+    
+    // If this node has a parent, get parent's history first
+    if (node.data.parentNodeId) {
+      const parentHistory = buildChatHistory(node.data.parentNodeId, currentNodes);
+      history.push(...parentHistory);
+    }
+
+    // Add current node's contribution to history
+    if (node.type === 'user' && node.data.prompt) {
+      history.push({
+        role: 'user',
+        content: node.data.prompt
+      });
+    } else if (node.type === 'response' && node.data.content && !node.data.isLoading) {
+      history.push({
+        role: 'assistant',
+        content: node.data.content
+      });
+    }
+
+    return history;
+  };
+
   const handleLogin = (newUser: User) => {
     setUser(newUser);
     setNodes([]);
@@ -110,7 +146,8 @@ const Flow = () => {
         type: 'initial',
         position: { x: centerX, y: centerY },
         data: {
-          onPrompt: (prompt: string) => handleInitialPrompt(prompt, centerX, centerY)
+          onPrompt: (prompt: string) => handleInitialPrompt(prompt, centerX, centerY),
+          chatHistory: []
         },
       };
       setNodes([initialNode]);
@@ -126,12 +163,24 @@ const Flow = () => {
     const userNodeId = `user-${nodeCounter}`;
     const responseNodeId = `response-${nodeCounter}`;
     
+    // Initial user node has empty chat history (it's the first message)
+    const userChatHistory: ChatMessage[] = [];
+    
     const userNode = {
       id: userNodeId,
       type: 'user',
       position: { x: initialX, y: initialY },
-      data: { prompt: prompt },
+      data: { 
+        prompt: prompt,
+        chatHistory: userChatHistory,
+        parentNodeId: undefined // No parent for initial user node
+      },
     };
+    
+    // Response node will have the user's message in its history
+    const responseChatHistory: ChatMessage[] = [
+      { role: 'user', content: prompt }
+    ];
     
     const responseNode = {
       id: responseNodeId,
@@ -140,11 +189,12 @@ const Flow = () => {
       data: {
         isLoading: true,
         onPrompt: (newPrompt: string) => handleBranch(responseNodeId, newPrompt),
-        branchCount: 0
+        branchCount: 0,
+        chatHistory: responseChatHistory,
+        parentNodeId: userNodeId
       },
     };
     
-    // CORRECTED: Create only one edge from user to response
     const responseEdge = {
       id: `edge-${userNodeId}-${responseNodeId}`,
       source: userNodeId,
@@ -157,12 +207,16 @@ const Flow = () => {
       style: { stroke: '#64748b' }
     };
     
-    // CORRECTED: Remove initial node and set a single edge, preventing cycles
     setNodes(prevNodes => prevNodes.filter(node => node.id !== 'initial-0').concat(userNode, responseNode));
     setEdges([responseEdge]);
     setNodeCounter(prev => prev + 1);
     
     try {
+      // For initial request, build chat history including the current user prompt
+      const requestChatHistory = [{ role: 'user', content: prompt }];
+      
+      console.log('Sending initial chat history to API:', requestChatHistory); // Debug log
+      
       const response = await fetch(`${API_BASE_URL}/interaction-nodes/start`, {
         method: 'POST',
         headers: {
@@ -171,7 +225,8 @@ const Flow = () => {
         },
         body: JSON.stringify({
           user_prompt: prompt,
-          summary_title: null
+          summary_title: null,
+          context_messages: requestChatHistory // Send complete history including current prompt
         }),
       });
 
@@ -181,12 +236,27 @@ const Flow = () => {
 
       const data = await response.json();
 
+      // Update response node with content and complete chat history
       setNodes(prevNodes => 
-        prevNodes.map(node => 
-          node.id === responseNodeId 
-            ? { ...node, data: { ...node.data, content: data.llm_response, isLoading: false, nodeId: data.node_id } }
-            : node
-        )
+        prevNodes.map(node => {
+          if (node.id === responseNodeId) {
+            const updatedChatHistory = [
+              ...responseChatHistory,
+              { role: 'assistant', content: data.llm_response }
+            ];
+            return { 
+              ...node, 
+              data: { 
+                ...node.data, 
+                content: data.llm_response, 
+                isLoading: false, 
+                nodeId: data.node_id,
+                chatHistory: updatedChatHistory
+              }
+            };
+          }
+          return node;
+        })
       );
     } catch (error) {
       console.error('Error getting response:', error);
@@ -200,7 +270,6 @@ const Flow = () => {
     }
   };
 
-  // CORRECTED: Refactored to use functional updates for state setters to avoid stale state
   const handleBranch = useCallback((sourceResponseNodeId: string, prompt: string) => {
     if (!user) {
       console.error("Cannot branch: User is not logged in.");
@@ -220,6 +289,14 @@ const Flow = () => {
                 return prevNodes;
             }
 
+            // Build chat history for the new user node (includes all conversation up to parent response)
+            const parentChatHistory = buildChatHistory(sourceResponseNodeId, prevNodes);
+            const userChatHistory = parentChatHistory; // User node stores history up to this point (without its own prompt)
+            const requestChatHistory = [
+                ...parentChatHistory,
+                { role: 'user', content: prompt }
+            ]; // Complete history including new prompt for API request
+
             const currentBranchCount = sourceNode.data.branchCount || 0;
             const branchSpacing = 350;
             const verticalOffset = 200;
@@ -233,7 +310,11 @@ const Flow = () => {
                 id: newUserNodeId,
                 type: 'user',
                 position: { x: newUserX, y: newUserY },
-                data: { prompt: prompt },
+                data: { 
+                    prompt: prompt,
+                    chatHistory: userChatHistory, // User node stores history up to this point (without its own prompt)
+                    parentNodeId: sourceResponseNodeId
+                },
             };
 
             const newResponseNode = {
@@ -241,76 +322,99 @@ const Flow = () => {
                 type: 'response',
                 position: { x: newUserX, y: newUserY + 150 },
                 data: {
-                isLoading: true,
-                onPrompt: (newPrompt: string) => handleBranch(newResponseNodeId, newPrompt),
-                branchCount: 0,
+                    isLoading: true,
+                    onPrompt: (newPrompt: string) => handleBranch(newResponseNodeId, newPrompt),
+                    branchCount: 0,
+                    chatHistory: requestChatHistory, // Response node gets complete history including new user message
+                    parentNodeId: newUserNodeId
                 },
             };
 
             const updatedSourceNode = {
                 ...sourceNode,
                 data: {
-                ...sourceNode.data,
-                branchCount: currentBranchCount + 1,
+                    ...sourceNode.data,
+                    branchCount: currentBranchCount + 1,
                 },
             };
 
             setEdges(prevEdges => {
                 const userEdge = {
-                id: `edge-${sourceResponseNodeId}-${newUserNodeId}`,
-                source: sourceResponseNodeId,
-                target: newUserNodeId,
-                sourceHandle: 'source',
-                targetHandle: 'target',
-                type: 'smoothstep',
-                markerEnd: { type: MarkerType.ArrowClosed },
+                    id: `edge-${sourceResponseNodeId}-${newUserNodeId}`,
+                    source: sourceResponseNodeId,
+                    target: newUserNodeId,
+                    sourceHandle: 'source',
+                    targetHandle: 'target',
+                    type: 'smoothstep',
+                    markerEnd: { type: MarkerType.ArrowClosed },
                 };
                 const responseEdge = {
-                id: `edge-${newUserNodeId}-${newResponseNodeId}`,
-                source: newUserNodeId,
-                target: newResponseNodeId,
-                sourceHandle: 'source',
-                targetHandle: 'target',
-                type: 'smoothstep',
-                markerEnd: { type: MarkerType.ArrowClosed },
+                    id: `edge-${newUserNodeId}-${newResponseNodeId}`,
+                    source: newUserNodeId,
+                    target: newResponseNodeId,
+                    sourceHandle: 'source',
+                    targetHandle: 'target',
+                    type: 'smoothstep',
+                    markerEnd: { type: MarkerType.ArrowClosed },
                 };
                 return [...prevEdges, userEdge, responseEdge];
             });
 
-            // Async side effect: fetch branch response
+            // Async side effect: fetch branch response with complete chat history
             (async () => {
                 try {
-                const response = await fetch(`${API_BASE_URL}/interaction-nodes/${parentApiNodeId}/branch`, {
-                    method: 'POST',
-                    headers: {
-                    'Content-Type': 'application/json',
-                    'x-user-id': user.id,
-                    },
-                    body: JSON.stringify({ user_prompt: prompt, summary_title: null }),
-                });
+                    console.log('Sending chat history to API:', requestChatHistory); // Debug log
 
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
+                    const response = await fetch(`${API_BASE_URL}/interaction-nodes/${parentApiNodeId}/branch`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'x-user-id': user.id,
+                        },
+                        body: JSON.stringify({ 
+                            user_prompt: prompt, 
+                            summary_title: null,
+                            context_messages: requestChatHistory // Send complete conversation history including current prompt
+                        }),
+                    });
 
-                const data = await response.json();
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
 
-                setNodes(nodesAfter => 
-                    nodesAfter.map(node =>
-                    node.id === newResponseNodeId
-                        ? { ...node, data: { ...node.data, content: data.llm_response, isLoading: false, nodeId: data.node_id } }
-                        : node
-                    )
-                );
+                    const data = await response.json();
+
+                    // Update response node with content and complete chat history
+                    setNodes(nodesAfter => 
+                        nodesAfter.map(node => {
+                            if (node.id === newResponseNodeId) {
+                                const completeChatHistory = [
+                                    ...requestChatHistory,
+                                    { role: 'assistant', content: data.llm_response }
+                                ];
+                                return { 
+                                    ...node, 
+                                    data: { 
+                                        ...node.data, 
+                                        content: data.llm_response, 
+                                        isLoading: false, 
+                                        nodeId: data.node_id,
+                                        chatHistory: completeChatHistory
+                                    }
+                                };
+                            }
+                            return node;
+                        })
+                    );
                 } catch (error) {
-                console.error('Error creating branch:', error);
-                setNodes(nodesAfter =>
-                    nodesAfter.map(node =>
-                    node.id === newResponseNodeId
-                        ? { ...node, data: { ...node.data, content: 'Error creating branch. Please try again.', isLoading: false } }
-                        : node
-                    )
-                );
+                    console.error('Error creating branch:', error);
+                    setNodes(nodesAfter =>
+                        nodesAfter.map(node =>
+                            node.id === newResponseNodeId
+                                ? { ...node, data: { ...node.data, content: 'Error creating branch. Please try again.', isLoading: false } }
+                                : node
+                        )
+                    );
                 }
             })();
 
@@ -321,7 +425,7 @@ const Flow = () => {
         
         return currentCounter + 1;
     });
-  }, [user]); // Removed dependencies that caused stale closures
+  }, [user]);
 
   const startNewConversation = () => {
     if (!user) {
