@@ -112,12 +112,28 @@ const Flow = () => {
     }
 
     // Add current node's contribution to history
-    if (node.type === 'user' && node.data.prompt) {
+    if (node.type === 'combined') {
+      // For combined nodes, add both user prompt and assistant response
+      if (node.data.prompt) {
+        history.push({
+          role: 'user',
+          content: node.data.prompt
+        });
+      }
+      if (node.data.content && !node.data.isLoading) {
+        history.push({
+          role: 'assistant',
+          content: node.data.content
+        });
+      }
+    } else if (node.type === 'user' && node.data.prompt) {
+      // Legacy support for old user nodes
       history.push({
         role: 'user',
         content: node.data.prompt
       });
     } else if (node.type === 'response' && node.data.content && !node.data.isLoading) {
+      // Legacy support for old response nodes
       history.push({
         role: 'assistant',
         content: node.data.content
