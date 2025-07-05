@@ -1,5 +1,6 @@
 import { memo, useState, useEffect } from 'react';
 import { Handle, Position } from '@xyflow/react';
+import MarkdownRenderer from './MarkdownRenderer';
 
 const ResponseNodeComponent = ({ data }) => {
   const [inputValue, setInputValue] = useState('');
@@ -32,11 +33,11 @@ const ResponseNodeComponent = ({ data }) => {
       <div className="space-y-4">
         <div className="font-semibold text-gray-900 text-lg">AI Response</div>
         
-        <div className="text-gray-800 p-3 bg-gray-50 rounded border min-h-[60px]">
+        <div className="p-3 bg-gray-50 rounded border min-h-[60px]">
           {isLoading ? (
             <div className="text-gray-500 italic">Generating response...</div>
           ) : (
-            data.content || 'No response yet'
+            <MarkdownRenderer content={data.content || 'No response yet'} />
           )}
         </div>
 
