@@ -2,7 +2,7 @@ import { memo, useState, useEffect } from 'react';
 import { Handle, Position } from '@xyflow/react';
 import MarkdownRenderer from './MarkdownRenderer';
 
-const ResponseNodeComponent = ({ data }) => {
+const CombinedNodeComponent = ({ data }) => {
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(data.isLoading || false);
 
@@ -31,16 +31,27 @@ const ResponseNodeComponent = ({ data }) => {
       />
       
       <div className="space-y-4">
-        <div className="font-semibold text-gray-900 text-lg">AI Response</div>
-        
-        <div className="p-3 bg-gray-50 rounded border min-h-[60px] break-words">
-          {isLoading ? (
-            <div className="text-gray-500 italic">Generating response...</div>
-          ) : (
-            <MarkdownRenderer content={data.content || 'No response yet'} />
-          )}
+        {/* User Query Section */}
+        <div className="space-y-2">
+          <div className="font-semibold text-gray-900 text-lg">You</div>
+          <div className="text-gray-800 p-3 bg-gray-50 rounded border break-words">
+            {data.prompt}
+          </div>
         </div>
 
+        {/* AI Response Section */}
+        <div className="space-y-2">
+          <div className="font-semibold text-gray-900 text-lg">AI Response</div>
+          <div className="p-3 bg-gray-50 rounded border min-h-[60px] break-words">
+            {isLoading ? (
+              <div className="text-gray-500 italic">Generating response...</div>
+            ) : (
+              <MarkdownRenderer content={data.content || 'No response yet'} />
+            )}
+          </div>
+        </div>
+
+        {/* Branch Creation Section */}
         {!isLoading && data.content && data.nodeId && (
           <div className="space-y-3">
             <div className="text-sm text-gray-600">
@@ -80,6 +91,6 @@ const ResponseNodeComponent = ({ data }) => {
   );
 };
 
-ResponseNodeComponent.displayName = 'ResponseNode';
+CombinedNodeComponent.displayName = 'CombinedNode';
 
-export default memo(ResponseNodeComponent);
+export default memo(CombinedNodeComponent); 

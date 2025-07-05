@@ -40,7 +40,7 @@ const InteractionNodeComponent = ({ data }) => {
               type="submit"
               className="mt-2 w-full px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors"
             >
-              Create Branch
+              Generate
             </button>
           </form>
         </div>

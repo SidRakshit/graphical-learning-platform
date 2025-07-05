@@ -15,7 +15,7 @@ const InitialNodeComponent = ({ data }) => {
   };
 
   return (
-    <div className="min-w-[300px] p-6 rounded-lg border-2 border-gray-400 bg-white shadow-lg hover:shadow-xl transition-shadow">
+    <div className="w-[576px] p-6 rounded-lg border-2 border-gray-400 bg-white shadow-lg hover:shadow-xl transition-shadow">
       <div className="space-y-4">
         <div className="font-semibold text-gray-900 text-lg">Start Conversation</div>
         <form onSubmit={handleSubmit} className="space-y-3">

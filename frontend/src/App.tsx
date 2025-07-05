@@ -12,8 +12,7 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import InitialNode from './components/InitialNode';
-import UserNode from './components/UserNode';
-import ResponseNode from './components/ResponseNode';
+import CombinedNode from './components/CombinedNode';
 
 const API_BASE_URL = '/api';
 
@@ -41,8 +40,7 @@ interface NodeData extends Record<string, unknown> {
 
 const nodeTypes = {
   initial: InitialNode,
-  user: UserNode,
-  response: ResponseNode,
+  combined: CombinedNode,
 };
 
 interface LoginModalProps {
@@ -160,60 +158,34 @@ const Flow = () => {
       return;
     }
 
-    const userNodeId = `user-${nodeCounter}`;
-    const responseNodeId = `response-${nodeCounter}`;
+    const combinedNodeId = `combined-${nodeCounter}`;
     
-    // Initial user node has empty chat history (it's the first message)
-    const userChatHistory: ChatMessage[] = [];
+    // Initial combined node has user prompt and will get response
+    const initialChatHistory: ChatMessage[] = [
+      { role: 'user' as const, content: prompt }
+    ];
     
-    const userNode = {
-      id: userNodeId,
-      type: 'user',
+    const combinedNode = {
+      id: combinedNodeId,
+      type: 'combined',
       position: { x: initialX, y: initialY },
       data: { 
         prompt: prompt,
-        chatHistory: userChatHistory,
-        parentNodeId: undefined // No parent for initial user node
-      },
-    };
-    
-    // Response node will have the user's message in its history
-    const responseChatHistory: ChatMessage[] = [
-      { role: 'user', content: prompt }
-    ];
-    
-    const responseNode = {
-      id: responseNodeId,
-      type: 'response',
-      position: { x: initialX, y: initialY + 150 },
-      data: {
         isLoading: true,
-        onPrompt: (newPrompt: string) => handleBranch(responseNodeId, newPrompt),
+        onPrompt: (newPrompt: string) => handleBranch(combinedNodeId, newPrompt),
         branchCount: 0,
-        chatHistory: responseChatHistory,
-        parentNodeId: userNodeId
+        chatHistory: initialChatHistory,
+        parentNodeId: undefined // No parent for initial combined node
       },
     };
     
-    const responseEdge = {
-      id: `edge-${userNodeId}-${responseNodeId}`,
-      source: userNodeId,
-      target: responseNodeId,
-      sourceHandle: 'source',
-      targetHandle: 'target',
-      type: 'smoothstep',
-      markerEnd: { type: MarkerType.ArrowClosed },
-      animated: true,
-      style: { stroke: '#64748b' }
-    };
-    
-    setNodes(prevNodes => prevNodes.filter(node => node.id !== 'initial-0').concat(userNode, responseNode));
-    setEdges([responseEdge]);
+    setNodes(prevNodes => prevNodes.filter(node => node.id !== 'initial-0').concat([combinedNode]));
+    setEdges([]);
     setNodeCounter(prev => prev + 1);
     
     try {
       // For initial request, build chat history including the current user prompt
-      const requestChatHistory = [{ role: 'user', content: prompt }];
+      const requestChatHistory = [{ role: 'user' as const, content: prompt }];
       
       console.log('Sending initial chat history to API:', requestChatHistory); // Debug log
       
@@ -236,13 +208,13 @@ const Flow = () => {
 
       const data = await response.json();
 
-      // Update response node with content and complete chat history
+      // Update combined node with content and complete chat history
       setNodes(prevNodes => 
         prevNodes.map(node => {
-          if (node.id === responseNodeId) {
-            const updatedChatHistory = [
-              ...responseChatHistory,
-              { role: 'assistant', content: data.llm_response }
+          if (node.id === combinedNodeId) {
+            const updatedChatHistory: ChatMessage[] = [
+              ...initialChatHistory,
+              { role: 'assistant' as const, content: data.llm_response }
             ];
             return { 
               ...node, 
@@ -262,7 +234,7 @@ const Flow = () => {
       console.error('Error getting response:', error);
       setNodes(prevNodes => 
         prevNodes.map(node => 
-          node.id === responseNodeId 
+          node.id === combinedNodeId 
             ? { ...node, data: { ...node.data, content: 'Error getting response. Please try again.', isLoading: false } }
             : node
         )
@@ -270,18 +242,17 @@ const Flow = () => {
     }
   };
 
-  const handleBranch = useCallback((sourceResponseNodeId: string, prompt: string) => {
+  const handleBranch = useCallback((sourceCombinedNodeId: string, prompt: string) => {
     if (!user) {
       console.error("Cannot branch: User is not logged in.");
       return;
     }
 
     setNodeCounter(currentCounter => {
-        const newUserNodeId = `user-${currentCounter}`;
-        const newResponseNodeId = `response-${currentCounter}`;
+        const newCombinedNodeId = `combined-${currentCounter}`;
 
         setNodes(prevNodes => {
-            const sourceNode = prevNodes.find(n => n.id === sourceResponseNodeId);
+            const sourceNode = prevNodes.find(n => n.id === sourceCombinedNodeId);
             const parentApiNodeId = sourceNode?.data?.nodeId;
 
             if (!parentApiNodeId) {
@@ -289,12 +260,11 @@ const Flow = () => {
                 return prevNodes;
             }
 
-            // Build chat history for the new user node (includes all conversation up to parent response)
-            const parentChatHistory = buildChatHistory(sourceResponseNodeId, prevNodes);
-            const userChatHistory = parentChatHistory; // User node stores history up to this point (without its own prompt)
-            const requestChatHistory = [
+            // Build chat history for the new combined node (includes all conversation up to parent response)
+            const parentChatHistory = buildChatHistory(sourceCombinedNodeId, prevNodes);
+            const requestChatHistory: ChatMessage[] = [
                 ...parentChatHistory,
-                { role: 'user', content: prompt }
+                { role: 'user' as const, content: prompt }
             ]; // Complete history including new prompt for API request
 
             const currentBranchCount = sourceNode.data.branchCount || 0;
@@ -303,30 +273,20 @@ const Flow = () => {
             const totalWidth = currentBranchCount * branchSpacing;
             const startX = sourceNode.position.x - totalWidth / 2;
 
-            const newUserX = startX + (currentBranchCount * branchSpacing);
-            const newUserY = sourceNode.position.y + verticalOffset;
+            const newCombinedX = startX + (currentBranchCount * branchSpacing);
+            const newCombinedY = sourceNode.position.y + verticalOffset;
 
-            const newUserNode = {
-                id: newUserNodeId,
-                type: 'user',
-                position: { x: newUserX, y: newUserY },
+            const newCombinedNode = {
+                id: newCombinedNodeId,
+                type: 'combined',
+                position: { x: newCombinedX, y: newCombinedY },
                 data: { 
                     prompt: prompt,
-                    chatHistory: userChatHistory, // User node stores history up to this point (without its own prompt)
-                    parentNodeId: sourceResponseNodeId
-                },
-            };
-
-            const newResponseNode = {
-                id: newResponseNodeId,
-                type: 'response',
-                position: { x: newUserX, y: newUserY + 150 },
-                data: {
                     isLoading: true,
-                    onPrompt: (newPrompt: string) => handleBranch(newResponseNodeId, newPrompt),
+                    onPrompt: (newPrompt: string) => handleBranch(newCombinedNodeId, newPrompt),
                     branchCount: 0,
-                    chatHistory: requestChatHistory, // Response node gets complete history including new user message
-                    parentNodeId: newUserNodeId
+                    chatHistory: requestChatHistory, // Combined node gets complete history including new user message
+                    parentNodeId: sourceCombinedNodeId
                 },
             };
 
@@ -339,25 +299,16 @@ const Flow = () => {
             };
 
             setEdges(prevEdges => {
-                const userEdge = {
-                    id: `edge-${sourceResponseNodeId}-${newUserNodeId}`,
-                    source: sourceResponseNodeId,
-                    target: newUserNodeId,
+                const combinedEdge = {
+                    id: `edge-${sourceCombinedNodeId}-${newCombinedNodeId}`,
+                    source: sourceCombinedNodeId,
+                    target: newCombinedNodeId,
                     sourceHandle: 'source',
                     targetHandle: 'target',
                     type: 'smoothstep',
                     markerEnd: { type: MarkerType.ArrowClosed },
                 };
-                const responseEdge = {
-                    id: `edge-${newUserNodeId}-${newResponseNodeId}`,
-                    source: newUserNodeId,
-                    target: newResponseNodeId,
-                    sourceHandle: 'source',
-                    targetHandle: 'target',
-                    type: 'smoothstep',
-                    markerEnd: { type: MarkerType.ArrowClosed },
-                };
-                return [...prevEdges, userEdge, responseEdge];
+                return [...prevEdges, combinedEdge];
             });
 
             // Async side effect: fetch branch response with complete chat history
@@ -384,13 +335,13 @@ const Flow = () => {
 
                     const data = await response.json();
 
-                    // Update response node with content and complete chat history
+                    // Update combined node with content and complete chat history
                     setNodes(nodesAfter => 
                         nodesAfter.map(node => {
-                            if (node.id === newResponseNodeId) {
-                                const completeChatHistory = [
+                            if (node.id === newCombinedNodeId) {
+                                const completeChatHistory: ChatMessage[] = [
                                     ...requestChatHistory,
-                                    { role: 'assistant', content: data.llm_response }
+                                    { role: 'assistant' as const, content: data.llm_response }
                                 ];
                                 return { 
                                     ...node, 
@@ -410,7 +361,7 @@ const Flow = () => {
                     console.error('Error creating branch:', error);
                     setNodes(nodesAfter =>
                         nodesAfter.map(node =>
-                            node.id === newResponseNodeId
+                            node.id === newCombinedNodeId
                                 ? { ...node, data: { ...node.data, content: 'Error creating branch. Please try again.', isLoading: false } }
                                 : node
                         )
@@ -419,8 +370,8 @@ const Flow = () => {
             })();
 
             return prevNodes
-                .map(node => (node.id === sourceResponseNodeId ? updatedSourceNode : node))
-                .concat(newUserNode, newResponseNode);
+                .map(node => (node.id === sourceCombinedNodeId ? updatedSourceNode : node))
+                .concat([newCombinedNode]);
         });
         
         return currentCounter + 1;
